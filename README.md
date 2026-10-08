@@ -490,7 +490,7 @@ Never routed: embeddings, fine-tuned or custom models (`ft:*` and others in `nev
 
 - **`load_config()` blocks startup with lev-local.** The first run waits for the ~9.5 GB download, and every run waits for lev to load. Plan for this in containers and serverless functions.
 - **Conversation memory is per process.** With several workers or replicas, a conversation whose calls reach different ones loses its sticky model; use session affinity at your load balancer (see [docs/deployment.md](docs/deployment.md)).
-- **lev is installed from its GitHub main branch**, so a new lev commit can change behaviour. For reproducible installs, pin lev to a commit (`...lev.git@<commit>#subdirectory=packages/lev`).
+
 - **Default tier models are built in** (see [How it works](#how-it-works)). If a provider retires one of those ids, calls to that tier fail. `tokentriage models refresh` makes `load_config()` warn about this; fix it under `models:`.
 
 ---
