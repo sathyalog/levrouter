@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import re
+import sys
+import threading
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -90,7 +92,6 @@ def load_config_file(path: Path) -> dict[str, Any]:
 KEPT_ENV = frozenset({
     "TOKENTRIAGE_HOME", "TOKENTRIAGE_CONFIG", "TOKENTRIAGE_ENABLED", "TOKENTRIAGE_LOG_LEVEL",
     "TOKENTRIAGE_BACKEND", "TOKENTRIAGE_MODE", "TOKENTRIAGE_LEV_API_KEY",
-    "TOKENTRIAGE_MODAL_KEY", "TOKENTRIAGE_MODAL_SECRET",
 })
 INTERNAL_ENV = frozenset({"TOKENTRIAGE_AUTOENABLE"})  # set by `tokentriage run`
 
@@ -99,6 +100,25 @@ _MODES = ("route", "eval")
 _LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 _TRUE = ("1", "true", "yes", "on")
 _warned_env: set[str] = set()
+
+# Startup messages go through the "tokentriage" logger. Before routing is enabled that logger has no handler
+# yet, so they are written to stderr instead, honouring log_level. log_level=None leaves it all to the app.
+_notify_level: int | None = logging.INFO
+_HEADER_NAME = re.compile(r"[A-Za-z0-9-]+")
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _set_notify_level(level: str | None) -> None:
+    global _notify_level
+    resolved = None if level is None else logging.getLevelName(str(level).upper())
+    _notify_level = resolved if (level is None or isinstance(resolved, int)) else logging.INFO
+
+
+def _notify(level: int, message: str) -> None:
+    if log.handlers or _notify_level is None:
+        log.log(level, message)
+    elif level >= _notify_level:
+        print(message, file=sys.stderr)
 
 
 @dataclass
@@ -121,7 +141,7 @@ def env_kill_switch() -> bool:
 def _warn_once(key: str, message: str) -> None:
     if key not in _warned_env:
         _warned_env.add(key)
-        print(f"⚠️  tokentriage: {message}")
+        _notify(logging.WARNING, f"⚠️  tokentriage: {message}")
 
 
 def _apply_env(cfg: RouterConfig) -> None:
@@ -142,12 +162,13 @@ def _apply_env(cfg: RouterConfig) -> None:
             _warn_once("TOKENTRIAGE_LOG_LEVEL", f"TOKENTRIAGE_LOG_LEVEL={level!r} ignored; expected one of {', '.join(_LOG_LEVELS)}")
 
 
-def _warn_removed_env() -> None:
-    removed = sorted(k for k in os.environ if k.startswith("TOKENTRIAGE_") and k not in KEPT_ENV | INTERNAL_ENV)
+def _warn_removed_env(referenced: frozenset[str] = frozenset()) -> None:
+    """`referenced` are variables named under lev_headers, which may legitimately start with TOKENTRIAGE_."""
+    removed = sorted(k for k in os.environ if k.startswith("TOKENTRIAGE_") and k not in KEPT_ENV | INTERNAL_ENV | referenced)
     fresh = [k for k in removed if k not in _warned_env]
     if fresh:
         _warned_env.update(fresh)
-        print(f"⚠️  tokentriage: ignoring environment variables that are no longer used: {', '.join(fresh)}. "
+        _notify(logging.WARNING, f"⚠️  tokentriage: ignoring environment variables that are no longer used: {', '.join(fresh)}. "
               "Set these in tokentriage.yaml (see docs/deployment.md).")
 
 
@@ -169,16 +190,15 @@ def _trigger_lev_download(checkpoint: str = "interfaze-ai/lev") -> bool:
             return False
 
         import time
-        print("🔄 tokentriage: loading LEV into memory from the local cache...")
+        _notify(logging.INFO, "🔄 tokentriage: loading LEV into memory from the local cache...")
         start = time.perf_counter()
         model = lev.load(checkpoint)
         load_time = time.perf_counter() - start
 
-        print(f"✅ tokentriage: LEV loaded into memory in {load_time:.1f}s")
-        print()
+        _notify(logging.INFO, f"✅ tokentriage: LEV loaded into memory in {load_time:.1f}s")
 
         # Test the model with a sample request to verify it works
-        print("🧪 Testing LEV classification...")
+        _notify(logging.INFO, "🧪 Testing LEV classification...")
         test_questions = {
             "tier": {
                 "type": "choice",
@@ -195,15 +215,13 @@ def _trigger_lev_download(checkpoint: str = "interfaze-ai/lev") -> bool:
         result = model.system_one("What is 2+2?", test_questions)
         tier_probs = result.answers["tier"].probabilities
 
-        print(f"   Sample: 'What is 2+2?'")
-        print(f"   → Simple: {tier_probs['simple']:.1%}")
-        print(f"   → Standard: {tier_probs['standard']:.1%}")
-        print(f"   → Complex: {tier_probs['complex']:.1%}")
-        print()
+        _notify(logging.INFO, f"   Sample: 'What is 2+2?'")
+        _notify(logging.INFO, f"   → Simple: {tier_probs['simple']:.1%}")
+        _notify(logging.INFO, f"   → Standard: {tier_probs['standard']:.1%}")
+        _notify(logging.INFO, f"   → Complex: {tier_probs['complex']:.1%}")
 
-        print("✅ tokentriage: LEV model ready for routing!")
-        print("   Requests will now be routed based on complexity analysis")
-        print()
+        _notify(logging.INFO, "✅ tokentriage: LEV model ready for routing!")
+        _notify(logging.INFO, "   Requests will now be routed based on complexity analysis")
 
         # Hand the loaded engine to the classifier so warmup() does not load a second ~9 GB copy.
         from .classifiers.lev_local import LevLocalClassifier
@@ -223,9 +241,8 @@ def _trigger_lev_download(checkpoint: str = "interfaze-ai/lev") -> bool:
         return False
 
     except Exception as e:
-        print(f"⚠️  tokentriage: LEV download/test failed: {e}")
-        print("   Falling back to heuristic routing (75% accurate, <1ms)")
-        print()
+        _notify(logging.WARNING, f"⚠️  tokentriage: LEV download/test failed: {e}")
+        _notify(logging.WARNING, "   Falling back to heuristic routing (75% accurate, <1ms)")
         return False
 
 
@@ -260,9 +277,26 @@ def _check_tier_models(cfg: RouterConfig) -> None:
             if model in known or canonical_id(model) in known:
                 continue
             hint = _family_newest(model, ids)
-            print(f"⚠️  tokentriage: {provider} {tier} tier uses {model!r}, which isn't in the models your "
+            _notify(logging.WARNING, f"⚠️  tokentriage: {provider} {tier} tier uses {model!r}, which isn't in the models your "
                   f"{provider} key can use" + (f" (newest similar: {hint!r})" if hint else "")
                   + ". Set it under `models:` in tokentriage.yaml, or run `tokentriage models refresh`.")
+
+
+def _clean_lev_headers(raw: Any) -> dict[str, str]:
+    """`lev_headers: {Header-Name: ENV_VAR_NAME}`. Bad entries are reported and dropped, never fatal."""
+    if raw in (None, {}):
+        return {}
+    if not isinstance(raw, dict):
+        _warn_once("lev_headers", "lev_headers ignored; expected a mapping of header name to environment variable name")
+        return {}
+    clean: dict[str, str] = {}
+    for header, var in raw.items():
+        if not (isinstance(header, str) and _HEADER_NAME.fullmatch(header) and isinstance(var, str) and _ENV_NAME.fullmatch(var)):
+            _warn_once(f"lev_headers:{header}", f"lev_headers entry {header!r} ignored; use "
+                       "{Header-Name: ENV_VAR_NAME} (the value is the NAME of an environment variable, not the secret itself)")
+            continue
+        clean[header] = var
+    return clean
 
 
 def _models_to_tiers(models: dict) -> tuple[dict, dict]:
@@ -276,7 +310,7 @@ def _models_to_tiers(models: dict) -> tuple[dict, dict]:
     for tier, spec in models.items():
         entries = spec.get("providers", []) if isinstance(spec, dict) else []
         if tier not in TIERS:
-            print(f"⚠️  tokentriage: models.{tier} ignored (tiers are {', '.join(TIERS)})")
+            _notify(logging.WARNING, f"⚠️  tokentriage: models.{tier} ignored (tiers are {', '.join(TIERS)})")
             continue
         for entry in entries:
             head, _, rest = str(entry).partition("/")
@@ -285,7 +319,7 @@ def _models_to_tiers(models: dict) -> tuple[dict, dict]:
             elif head in PROVIDERS and rest:
                 tiers.setdefault(head, {}).setdefault(tier, rest)
             else:
-                print(f"⚠️  tokentriage: models.{tier} entry {entry!r} ignored; use provider/model "
+                _notify(logging.WARNING, f"⚠️  tokentriage: models.{tier} entry {entry!r} ignored; use provider/model "
                       f"({', '.join(PROVIDERS)}) or openrouter/vendor/model")
     return tiers, families
 
@@ -294,7 +328,6 @@ def resolve_config(path: str | Path | None = None) -> Resolved:
     """Read the settings: the file (an explicit path, else $TOKENTRIAGE_CONFIG, else found by searching
     the current folder and its parents), then the kept environment variables on top.
     """
-    _warn_removed_env()
     chosen = path or os.environ.get("TOKENTRIAGE_CONFIG") or None
     source = Path(chosen) if chosen else find_config_file()
     config_dict: dict[str, Any] = dict(load_config_file(source)) if source else {}
@@ -309,6 +342,9 @@ def resolve_config(path: str | Path | None = None) -> Resolved:
         config_dict.update(config_dict.pop("router") or {})
 
     enabled = bool(config_dict.pop("enabled", True))
+    _set_notify_level(config_dict.get("log_level", "INFO"))  # the file's level, before any warning is shown
+    config_dict["lev_headers"] = _clean_lev_headers(config_dict.get("lev_headers"))
+    _warn_removed_env(frozenset(config_dict["lev_headers"].values()))
     if "lev_api_key" in config_dict:
         config_dict.pop("lev_api_key")
         _warn_once("lev_api_key", "lev_api_key in a config file is ignored (files get committed). "
@@ -333,10 +369,29 @@ def resolve_config(path: str | Path | None = None) -> Resolved:
         if isinstance(config_dict.get(key), list):
             config_dict[key] = tuple(config_dict[key])
     cfg = RouterConfig(**config_dict)
+    _set_notify_level(cfg.log_level)
     _apply_env(cfg)
+    _set_notify_level(cfg.log_level)
     if env_kill_switch():
         enabled = False
     return Resolved(cfg, frameworks, providers, enabled, source)
+
+
+def _start_http_warmup(cfg: RouterConfig) -> threading.Thread | None:
+    """Wake a scale-to-zero lev server in the background; never blocks startup and never raises."""
+
+    def run() -> None:
+        try:
+            from .router import build_classifier
+
+            build_classifier(cfg).warmup()
+            _notify(logging.INFO, "tokentriage: lev-http server is warm")
+        except Exception as exc:  # noqa: BLE001 - a failed warm-up only means the first call may fall back
+            _notify(logging.WARNING, f"tokentriage: lev-http warm-up failed ({type(exc).__name__}); the first call may use the heuristic")
+
+    thread = threading.Thread(target=run, name="tokentriage-warmup", daemon=True)
+    thread.start()
+    return thread
 
 
 def load_config(config_path: str | None = None, auto_enable: bool = True) -> tuple[RouterConfig, tuple[str, ...], tuple[str, ...] | None]:
@@ -354,7 +409,7 @@ def load_config(config_path: str | None = None, auto_enable: bool = True) -> tup
               cfg.backend, cfg.timeout_s, cfg.block_on_load, auto_enable)
 
     if not enabled:
-        print("tokentriage: disabled (enabled: false or TOKENTRIAGE_ENABLED=false); calls are not routed")
+        _notify(logging.WARNING, "tokentriage: disabled (enabled: false or TOKENTRIAGE_ENABLED=false); calls are not routed")
         return cfg, frameworks, providers
 
     _check_tier_models(cfg)
@@ -363,19 +418,22 @@ def load_config(config_path: str | None = None, auto_enable: bool = True) -> tup
     if auto_enable and cfg.backend == "lev-local":
         if not _trigger_lev_download(cfg.lev_checkpoint):
             # Fallback to heuristic if download fails
-            print("   Switching to heuristic backend for now")
+            _notify(logging.WARNING, "   Switching to heuristic backend for now")
             cfg.backend = "heuristic"
 
     # Warmup LEV BEFORE enabling hooks if block_on_load is set
     if cfg.backend == "lev-local" and cfg.block_on_load:
         try:
             from .classifiers.lev_local import LevLocalClassifier
-            print("⏳ tokentriage: Preloading LEV model (this may take 5-10 seconds)...")
+            _notify(logging.INFO, "⏳ tokentriage: Preloading LEV model (this may take 5-10 seconds)...")
             classifier = LevLocalClassifier(cfg.lev_checkpoint, cfg.timeout_s, cfg.block_on_load)
             classifier.warmup()
-            print("✅ tokentriage: LEV model preloaded and ready")
+            _notify(logging.INFO, "✅ tokentriage: LEV model preloaded and ready")
         except Exception as e:
-            print(f"⚠️  tokentriage: LEV preload failed: {e}")
+            _notify(logging.WARNING, f"⚠️  tokentriage: LEV preload failed: {e}")
+
+    if cfg.backend == "lev-http" and cfg.warm_on_load:
+        _start_http_warmup(cfg)
 
     # Auto-enable routing if requested
     if auto_enable:
@@ -386,8 +444,8 @@ def load_config(config_path: str | None = None, auto_enable: bool = True) -> tup
                 kwargs["providers"] = providers
             installed = enable(cfg, **kwargs)
             if installed:
-                print(f"✅ tokentriage: Routing enabled for {', '.join(installed)}")
+                _notify(logging.INFO, f"✅ tokentriage: Routing enabled for {', '.join(installed)}")
         except Exception as e:
-            print(f"⚠️  tokentriage: Failed to enable routing: {e}")
+            _notify(logging.WARNING, f"⚠️  tokentriage: Failed to enable routing: {e}")
 
     return cfg, frameworks, providers

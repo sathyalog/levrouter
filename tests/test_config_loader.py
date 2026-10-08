@@ -1,9 +1,10 @@
 """load_config must honour the YAML (router settings and models), and lev_download must report real progress."""
 
+import pytest
 import yaml
 
 import tokentriage
-from tokentriage import RouterConfig, cli_setup, lev_download
+from tokentriage import RouterConfig, cli_setup, config_loader, lev_download
 from tokentriage.__main__ import main
 from tokentriage.config_loader import find_config_file, load_config, resolve_config
 from tokentriage.integrations import langchain as lc
@@ -24,6 +25,11 @@ features:
 """
 
 
+@pytest.fixture(autouse=True)
+def _fresh_warning_state(monkeypatch):
+    monkeypatch.setattr(config_loader, "_warned_env", set())
+
+
 def _load(tmp_path, text, **kwargs):
     path = tmp_path / "tokentriage.yaml"
     path.write_text(text)
@@ -36,14 +42,14 @@ def test_router_settings_and_models_are_applied(tmp_path, capsys):
     assert cfg.tiers["anthropic"]["simple"] == "claude-haiku-4-5-20251001"
     assert cfg.tiers["anthropic"]["standard"] == "claude-sonnet-5"  # untouched tiers keep defaults
     assert cfg.openrouter_families["anthropic"]["complex"] == "anthropic/claude-opus-5.5"
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert "'not-a-provider/x' ignored" in out and "ignoring config keys" in out and "features" in out
 
 
 def test_enabled_false_does_not_route(tmp_path, capsys):
     _load(tmp_path, "enabled: false\nrouter:\n  backend: heuristic\n")
     assert lc._State.router is None
-    assert "disabled" in capsys.readouterr().out
+    assert "disabled" in capsys.readouterr().err
 
 
 def test_setup_wizard_output_loads(tmp_path, monkeypatch):
@@ -136,7 +142,7 @@ def test_invalid_override_values_are_ignored_with_a_warning(tmp_path, monkeypatc
     path = _file(tmp_path, "router:\n  backend: heuristic\n")
     monkeypatch.setenv("TOKENTRIAGE_BACKEND", "banana")
     assert resolve_config(path).cfg.backend == "heuristic"
-    assert "TOKENTRIAGE_BACKEND='banana' ignored" in capsys.readouterr().out
+    assert "TOKENTRIAGE_BACKEND='banana' ignored" in capsys.readouterr().err
 
 
 def test_removed_variables_are_ignored_and_warned_about(tmp_path, monkeypatch, capsys):
@@ -145,16 +151,16 @@ def test_removed_variables_are_ignored_and_warned_about(tmp_path, monkeypatch, c
     monkeypatch.setenv("TOKENTRIAGE_OPENAI_SIMPLE", "gpt-4o-mini")
     cfg = resolve_config(path).cfg
     assert cfg.min_tier is None and cfg.tiers["openai"]["simple"] != "gpt-4o-mini"
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert "no longer used" in out and "TOKENTRIAGE_MIN_TIER" in out and "TOKENTRIAGE_OPENAI_SIMPLE" in out
     resolve_config(path)
-    assert "no longer used" not in capsys.readouterr().out  # said once
+    assert "no longer used" not in capsys.readouterr().err  # said once
 
 
 def test_lev_api_key_in_a_file_is_dropped(tmp_path, capsys):
     path = _file(tmp_path, "router:\n  backend: lev-http\n  lev_api_key: s3cret-value\n")
     cfg = resolve_config(path).cfg
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert cfg.lev_api_key is None and "TOKENTRIAGE_LEV_API_KEY" in out and "s3cret-value" not in out
 
 
@@ -214,3 +220,97 @@ def test_setup_wizard_advanced_step_writes_only_changes(monkeypatch):
     config = _wizard(monkeypatch, ["3", anthropic, "n", "y", "n", "y", "", "y", "2", "300", "y"])
     assert "frameworks" not in config
     assert not {"sticky_threads", "escalate_after_repeats", "thread_ttl_s"} & set(config["router"])
+
+
+def test_lev_headers_map_header_names_to_env_var_names(tmp_path, capsys):
+    cfg = _load(tmp_path, "router:\n  backend: heuristic\n  lev_headers:\n    Modal-Key: MODAL_KEY\n    Modal-Secret: MODAL_SECRET\n",
+                auto_enable=False)
+    assert cfg.lev_headers == {"Modal-Key": "MODAL_KEY", "Modal-Secret": "MODAL_SECRET"}
+    assert "ignored" not in capsys.readouterr().err
+
+
+def test_bad_lev_headers_entries_are_dropped_with_a_warning(tmp_path, capsys):
+    text = ("router:\n  backend: heuristic\n  lev_headers:\n    Good-Header: GOOD_VAR\n"
+            "    'Bad Header': SOME_VAR\n    Another: 'not a var name!'\n    Third: 5\n")
+    cfg = _load(tmp_path, text, auto_enable=False)
+    err = capsys.readouterr().err
+    assert cfg.lev_headers == {"Good-Header": "GOOD_VAR"}
+    assert "'Bad Header' ignored" in err and "'Another' ignored" in err and "'Third' ignored" in err
+    assert "NAME of an environment variable" in err
+
+
+def test_lev_headers_that_is_not_a_mapping_is_ignored(tmp_path, capsys):
+    cfg = _load(tmp_path, "router:\n  backend: heuristic\n  lev_headers: [a, b]\n", auto_enable=False)
+    assert cfg.lev_headers == {} and "lev_headers ignored" in capsys.readouterr().err
+
+
+def test_env_vars_named_under_lev_headers_are_not_reported_as_removed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("TOKENTRIAGE_MODAL_KEY", "wk-x")
+    monkeypatch.setenv("TOKENTRIAGE_SOMETHING_ELSE", "1")
+    _load(tmp_path, "router:\n  backend: heuristic\n  lev_headers:\n    Modal-Key: TOKENTRIAGE_MODAL_KEY\n", auto_enable=False)
+    err = capsys.readouterr().err
+    assert "TOKENTRIAGE_SOMETHING_ELSE" in err and "TOKENTRIAGE_MODAL_KEY" not in err
+
+
+def test_startup_messages_respect_log_level(tmp_path, capsys):
+    text = "router:\n  backend: heuristic\n  log_level: ERROR\n  bogus_key: 1\n"
+    _load(tmp_path, text, auto_enable=False)
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+def test_startup_warnings_appear_at_the_default_level_on_stderr_not_stdout(tmp_path, capsys):
+    _load(tmp_path, "router:\n  backend: heuristic\n  bogus_key: 1\n", auto_enable=False)
+    captured = capsys.readouterr()
+    assert captured.out == "" and "bogus_key" in captured.err
+
+
+def test_log_level_none_hands_startup_messages_to_the_apps_logging(tmp_path, capsys, caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="tokentriage"):
+        _load(tmp_path, "router:\n  backend: heuristic\n  log_level: null\n  bogus_key: 1\n", auto_enable=False)
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == "" and "bogus_key" in caplog.text
+
+
+def test_warm_on_load_sends_one_background_request_only_when_enabled(tmp_path, monkeypatch):
+    import httpx
+
+    from tokentriage.classifiers import lev_http
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"answers": {}})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(lev_http.LevHttpClassifier, "classify", lambda *a, **k: None)
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    base = "router:\n  backend: lev-http\n  lev_url: https://lev.example.com\n  allow_remote_lev: true\n"
+    import threading
+
+    _load(tmp_path, base, auto_enable=False)
+    assert calls == []
+    _load(tmp_path, base + "  warm_on_load: true\n", auto_enable=False)
+    for t in threading.enumerate():
+        if t.name == "tokentriage-warmup":
+            t.join(5)
+    assert calls == ["/v1/systemone"]
+
+
+def test_a_failing_warm_up_never_raises_and_is_reported(tmp_path, monkeypatch, capsys):
+    import threading
+
+    import httpx
+
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real_client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(503)), **kw))
+    _load(tmp_path, "router:\n  backend: lev-http\n  lev_url: https://lev.example.com\n  allow_remote_lev: true\n  warm_on_load: true\n",
+          auto_enable=False)
+    for t in threading.enumerate():
+        if t.name == "tokentriage-warmup":
+            t.join(5)
+    assert "warm-up failed" in capsys.readouterr().err

@@ -57,7 +57,8 @@ def build_classifier(cfg: RouterConfig) -> Classifier:
         from .classifiers.lev_http import LevHttpClassifier
 
         return LevHttpClassifier(
-            cfg.lev_url, cfg.timeout_s, cfg.lev_api_key, cfg.allow_remote_lev, cfg.redact_classifier_input
+            cfg.lev_url, cfg.timeout_s, cfg.lev_api_key, cfg.allow_remote_lev, cfg.redact_classifier_input,
+            cfg.lev_headers,
         )
     return HeuristicClassifier()
 

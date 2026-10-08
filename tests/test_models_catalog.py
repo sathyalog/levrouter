@@ -62,6 +62,6 @@ def test_startup_warns_about_tier_models_the_key_cannot_use(tmp_path, capsys):
     yaml_file = tmp_path / "tokentriage.yaml"
     yaml_file.write_text("router:\n  backend: heuristic\n")
     load_config(str(yaml_file), auto_enable=False)
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert "standard tier uses 'claude-sonnet-5'" in out and "newest similar: 'claude-sonnet-5-5'" in out
     assert "simple tier" not in out and "complex tier" not in out  # dated id and exact id both count as available

@@ -37,6 +37,13 @@ class RouterConfig:
     lev_url: str = "http://localhost:8000"
     # Bearer token for a protected `lev serve`. Read from TOKENTRIAGE_LEV_API_KEY; never logged.
     lev_api_key: str | None = field(default=None, repr=False)
+    # lev-http only: extra request headers for a protected server, as {header name: ENV VAR NAME}.
+    # The file holds only variable names; the values are read from the environment, so no secret is committed.
+    # Example (Modal proxy auth): {"Modal-Key": "MODAL_KEY", "Modal-Secret": "MODAL_SECRET"}.
+    lev_headers: dict[str, str] = field(default_factory=dict)
+    # lev-http only: send one background request at load_config() so a scale-to-zero server starts
+    # before the first real call. Off by default because it is a billable request.
+    warm_on_load: bool = False
     tiers: dict[str, dict[str, str]] = field(default_factory=lambda: {k: dict(v) for k, v in DEFAULT_TIERS.items()})
     # A request is "complex" when P(complex) + 0.25*P(reasoning) + 0.15*P(code) reaches this.
     complex_threshold: float = 0.5

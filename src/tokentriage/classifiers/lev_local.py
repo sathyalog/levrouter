@@ -6,7 +6,8 @@ import importlib.util
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 
 from ..features import RequestFeatures
 from .base import LEV_QUESTIONS, Signals, signals_from_answers
@@ -16,6 +17,10 @@ log = logging.getLogger("tokentriage")
 
 class LevNotReady(RuntimeError):
     """lev is still loading; the router falls back for this call."""
+
+
+class LevBusy(RuntimeError):
+    """An earlier decision timed out and is still running; the router falls back instead of queueing behind it."""
 
 
 class LevLocalClassifier:
@@ -33,6 +38,8 @@ class LevLocalClassifier:
         # One worker: torch forwards are serialized, and a timed-out call does not
         # pile up more work behind it.
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tokentriage")
+        self._abandoned: Future | None = None  # the timed-out decision the worker is still running
+        self._abandon_lock = threading.Lock()  # not the class-level load lock, which is held while lev loads
 
     # -- loading -------------------------------------------------------------
 
@@ -100,9 +107,19 @@ class LevLocalClassifier:
             raise cls._load_error
         if cls._engine is None:
             raise LevNotReady("lev is still loading")
+        with self._abandon_lock:
+            stuck = self._abandoned
+            if stuck is not None and not stuck.done():
+                raise LevBusy("an earlier lev decision timed out and is still running")
+            self._abandoned = None
         start = time.perf_counter()
         future = self._pool.submit(cls._engine.system_one, state, LEV_QUESTIONS)
-        response = future.result(timeout=self.timeout_s)
+        try:
+            response = future.result(timeout=self.timeout_s)
+        except FutureTimeout:
+            with self._abandon_lock:
+                self._abandoned = future
+            raise
         elapsed_ms = (time.perf_counter() - start) * 1000
         log.debug("tokentriage: LEV classify - state_len=%d, elapsed_ms=%.0f, timeout_s=%.1f", len(state), elapsed_ms, self.timeout_s)
         return signals_from_answers(response.answers, self.name, elapsed_ms)

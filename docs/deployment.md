@@ -13,10 +13,11 @@
 | `TOKENTRIAGE_BACKEND` | Overrides `router.backend` (`lev-local`, `lev-http`, `heuristic`) | the file's value | an emergency fallback, for example `heuristic` while lev is down |
 | `TOKENTRIAGE_MODE` | Overrides `router.mode` (`route`, `eval`) | the file's value | running [evaluation mode](evaluation.md); `tokentriage run --mode eval` sets it for you |
 | `TOKENTRIAGE_LEV_API_KEY` | **Secret.** Bearer key sent to a protected `lev serve` server (`lev-http` backend) | none | the lev server checks a key |
-| `TOKENTRIAGE_MODAL_KEY` | **Secret.** Sent as the `Modal-Key` header (`wk-...`) to a Modal endpoint with proxy auth. Used only together with `TOKENTRIAGE_MODAL_SECRET` | none | `lev-http` points at a Modal web endpoint |
-| `TOKENTRIAGE_MODAL_SECRET` | **Secret.** Sent as the `Modal-Secret` header (`ws-...`) | none | same as above |
+| any name you choose | **Secret.** Values for `router.lev_headers`, which maps header names to variable names (for example `Modal-Key: MODAL_KEY`); see the README's lev-http authentication notes | none | the lev server wants headers other than a Bearer key (Modal proxy auth, Cloudflare Access, a gateway) |
 
 An invalid value for `TOKENTRIAGE_BACKEND`, `_MODE` or `_LOG_LEVEL` is ignored with a warning, never silently applied.
+
+Startup messages (warnings about the config, `models:` entries, removed variables, and so on) go through the `tokentriage` logger and honour `log_level`. Before routing is enabled they are written to stderr, never stdout.
 
 **Variables that belong to other software** (tokentriage reads some, the rest are read by the libraries it routes):
 

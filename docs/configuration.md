@@ -31,6 +31,8 @@ tokentriage.enable(tokentriage.RouterConfig.from_yaml("tokentriage.yaml"))
 | `lev_checkpoint` | `"interfaze-ai/lev"` | Hugging Face id or local path passed to `lev.load()` |
 | `lev_url` | `"http://localhost:8000"` | `lev serve` address for `backend="lev-http"` |
 | `lev_api_key` | `None` | Bearer token for a protected `lev serve`. Set it in code only; put it in `TOKENTRIAGE_LEV_API_KEY` otherwise (in a config file it is ignored with a warning). Never logged. |
+| `lev_headers` | `{}` | `lev-http` only: extra request headers as `{Header-Name: ENV_VAR_NAME}`. The file holds only variable *names*; the values are read from the environment, so nothing secret is committed. Example for Modal: `{Modal-Key: MODAL_KEY, Modal-Secret: MODAL_SECRET}`. An unset variable skips that header with a warning. |
+| `warm_on_load` | `False` | `lev-http` only: `load_config()` sends one background request so a scale-to-zero server starts before the first real call. It never blocks startup; a failure is logged and ignored. The request is billable, so it is off by default. |
 | `timeout_s` | `1.5` | Seconds per decision. On timeout the heuristic decides that call. |
 | `block_on_load` | `False` | `False`: the first call starts loading lev in the background, and the heuristic routes until lev is ready |
 | `cache_size` | `1024` | Decisions cached, keyed by a SHA-256 of the request state |

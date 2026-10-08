@@ -173,6 +173,8 @@ request). Prompts may then go to a different vendor than the one in your code.
         if not _is_private(host_of(url) or ""):
             print("   That server is outside your private network, so request text is sent over the internet.")
             print("   tokentriage requires https for it, and reads the bearer key from TOKENTRIAGE_LEV_API_KEY.")
+            print("   If it needs other headers (Modal, Cloudflare Access, a gateway), map each header to the NAME of an")
+            print("   environment variable under router.lev_headers, for example {Modal-Key: MODAL_KEY}.")
             config_dict["router"]["allow_remote_lev"] = True
 
     print("\n\nSTEP 4: Model tier configuration")

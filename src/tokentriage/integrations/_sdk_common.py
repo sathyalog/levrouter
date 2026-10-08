@@ -113,6 +113,9 @@ def _plan_unguarded(resource: Any, kwargs: dict, allowed: frozenset[str], enable
     decision = router.decide(provider, model, features, None, max_out if isinstance(max_out, int) else None)
     routed = dict(kwargs, model=decision.model)
     _apply_compat(provider, decision.model, routed)
+    if stream and provider == "openai" and "stream_options" not in routed:
+        # Without this the stream carries no token counts. Other OpenAI-compatible hosts may reject the option.
+        routed["stream_options"] = {"include_usage": True}
     return routed, tracing.begin(decision, features, None, cfg, stream)
 
 
@@ -136,7 +139,245 @@ def _finish(trace: Any, result: Any, error: BaseException | None = None) -> None
         log.debug("tokentriage: tracing failed", exc_info=True)
 
 
-async def _await(pending: Any, trace: Any, stream: bool) -> Any:
+_INPUT_FIELDS = ("input_tokens", "prompt_tokens")
+_OUTPUT_FIELDS = ("output_tokens", "completion_tokens")
+
+
+def _merge(acc: dict, usage: Any) -> None:
+    """Fold a usage object from a stream event into the running totals (input: largest seen, output: latest)."""
+    if usage is None:
+        return
+    for name in _INPUT_FIELDS:
+        value = getattr(usage, name, None)
+        if isinstance(value, int):
+            acc["input_tokens"] = max(acc.get("input_tokens", 0), value)
+    for name in _OUTPUT_FIELDS:
+        value = getattr(usage, name, None)
+        if isinstance(value, int):
+            acc["output_tokens"] = value
+
+
+def _observe(acc: dict, event: Any) -> None:
+    try:
+        _merge(acc, getattr(event, "usage", None))  # Anthropic message_delta, OpenAI final chunk
+        _merge(acc, getattr(getattr(event, "message", None), "usage", None))  # Anthropic message_start
+    except Exception:  # noqa: BLE001 - counting tokens must never break the app's stream
+        log.debug("tokentriage: could not read stream usage", exc_info=True)
+
+
+def _snapshot_usage(stream: Any) -> dict:
+    """Usage so far from a SDK stream helper's own accumulated snapshot (no further reading of the stream)."""
+    acc: dict = {}
+    for attr in ("current_message_snapshot", "current_completion_snapshot"):
+        try:
+            _merge(acc, getattr(getattr(stream, attr), "usage", None))
+        except Exception:  # noqa: BLE001 - no snapshot yet (nothing was read) or not this SDK
+            continue
+    return acc
+
+
+def _is_usage_only(chunk: Any) -> bool:
+    """The extra final chunk the SDK sends for stream_options.include_usage: no choices, only usage."""
+    return getattr(chunk, "usage", None) is not None and not getattr(chunk, "choices", True)
+
+
+class _Finisher:
+    """Records the call in the usage log exactly once, however the stream ends."""
+
+    def __init__(self, trace: Any):
+        self._trace = trace
+        self.usage: dict = {}
+        self.done = False
+
+    def finish(self, error: BaseException | None = None) -> None:
+        if self.done:
+            return
+        self.done = True
+        _finish(self._trace, SimpleUsage(self.usage) if self.usage else None, error)
+
+
+class SimpleUsage:
+    """Adapter so _finish/_usage can read totals gathered from stream events."""
+
+    def __init__(self, totals: dict):
+        self.usage = type("U", (), totals)()
+
+
+class _SyncStream:
+    """Wraps an SDK event stream: passes every event through and records token usage when it ends."""
+
+    def __init__(self, inner: Any, trace: Any, hide_usage_chunk: bool):
+        self._inner, self._fin, self._hide = inner, _Finisher(trace), hide_usage_chunk
+        self._it = iter(inner)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            try:
+                item = next(self._it)
+            except StopIteration:
+                self._fin.finish()
+                raise
+            except BaseException as exc:
+                self._fin.finish(exc)
+                raise
+            _observe(self._fin.usage, item)
+            if self._hide and _is_usage_only(item):
+                continue
+            return item
+
+    def __enter__(self):
+        if hasattr(self._inner, "__enter__"):
+            self._inner.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if hasattr(self._inner, "__exit__"):
+                return self._inner.__exit__(*exc)
+            return None
+        finally:
+            self._fin.finish()
+
+    def close(self):
+        try:
+            self._inner.close()
+        finally:
+            self._fin.finish()
+
+    def __del__(self):
+        try:
+            self._fin.finish()
+        except Exception:  # noqa: BLE001 - interpreter shutdown
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _AsyncStream:
+    def __init__(self, inner: Any, trace: Any, hide_usage_chunk: bool):
+        self._inner, self._fin, self._hide = inner, _Finisher(trace), hide_usage_chunk
+        self._it = inner.__aiter__()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        while True:
+            try:
+                item = await self._it.__anext__()
+            except StopAsyncIteration:
+                self._fin.finish()
+                raise
+            except BaseException as exc:
+                self._fin.finish(exc)
+                raise
+            _observe(self._fin.usage, item)
+            if self._hide and _is_usage_only(item):
+                continue
+            return item
+
+    async def __aenter__(self):
+        if hasattr(self._inner, "__aenter__"):
+            await self._inner.__aenter__()
+        return self
+
+    async def __aexit__(self, *exc):
+        try:
+            if hasattr(self._inner, "__aexit__"):
+                return await self._inner.__aexit__(*exc)
+            return None
+        finally:
+            self._fin.finish()
+
+    async def close(self):
+        try:
+            await self._inner.close()
+        finally:
+            self._fin.finish()
+
+    def __del__(self):
+        try:
+            self._fin.finish()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _SyncManager:
+    """Wraps `messages.stream()` / `chat.completions.stream()`: the caller still gets the SDK's own stream object."""
+
+    def __init__(self, inner: Any, trace: Any):
+        self._inner, self._fin, self._stream = inner, _Finisher(trace), None
+
+    def __enter__(self):
+        # The SDK's helper calls its own (patched) create() here; that inner call must not be routed and counted again.
+        token = ROUTED.set(True)
+        try:
+            self._stream = self._inner.__enter__()
+        finally:
+            ROUTED.reset(token)
+        return self._stream
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._stream is not None:
+            self._fin.usage = _snapshot_usage(self._stream)
+        try:
+            return self._inner.__exit__(exc_type, exc, tb)
+        finally:
+            self._fin.finish(exc if isinstance(exc, Exception) else None)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _AsyncManager:
+    def __init__(self, inner: Any, trace: Any):
+        self._inner, self._fin, self._stream = inner, _Finisher(trace), None
+
+    async def __aenter__(self):
+        token = ROUTED.set(True)
+        try:
+            self._stream = await self._inner.__aenter__()
+        finally:
+            ROUTED.reset(token)
+        return self._stream
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if self._stream is not None:
+            self._fin.usage = _snapshot_usage(self._stream)
+        try:
+            return await self._inner.__aexit__(exc_type, exc, tb)
+        finally:
+            self._fin.finish(exc if isinstance(exc, Exception) else None)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def _tap(result: Any, trace: Any, hide_usage_chunk: bool) -> Any:
+    """Return `result` wrapped so its token usage is recorded when the stream ends. Unknown shapes pass through."""
+    try:
+        has = lambda name: hasattr(type(result), name)  # noqa: E731
+        if has("__aenter__") and not has("__aiter__"):
+            return _AsyncManager(result, trace)
+        if has("__enter__") and not has("__iter__"):
+            return _SyncManager(result, trace)
+        if has("__aiter__"):
+            return _AsyncStream(result, trace, hide_usage_chunk)
+        if has("__iter__"):
+            return _SyncStream(result, trace, hide_usage_chunk)
+    except Exception:  # noqa: BLE001 - never break the app's call
+        log.debug("tokentriage: could not wrap stream", exc_info=True)
+    return result
+
+
+async def _await(pending: Any, trace: Any, stream: bool, hide_usage_chunk: bool = False) -> Any:
     token = ROUTED.set(True)
     try:
         result = await pending
@@ -145,8 +386,9 @@ async def _await(pending: Any, trace: Any, stream: bool) -> Any:
         raise
     finally:
         ROUTED.reset(token)
-    if not stream:
-        _finish(trace, result)
+    if stream:
+        return _tap(result, trace, hide_usage_chunk)
+    _finish(trace, result)
     return result
 
 
@@ -158,6 +400,7 @@ def _wrap(orig: Callable, allowed: frozenset[str], enabled: set[str], extract: C
         if planned is None:
             return orig(self, *args, **kwargs)
         routed, trace = planned
+        injected = stream and "stream_options" in routed and "stream_options" not in kwargs
         token = ROUTED.set(True)
         try:
             result = orig(self, **routed)
@@ -167,10 +410,10 @@ def _wrap(orig: Callable, allowed: frozenset[str], enabled: set[str], extract: C
         finally:
             ROUTED.reset(token)
         if inspect.isawaitable(result):  # async clients return a coroutine from a sync-looking method
-            return _await(result, trace, stream)
-        if not stream:
-            _finish(trace, result)
-        # Streams are routed and logged, but their token usage is not recorded yet.
+            return _await(result, trace, stream, injected)
+        if stream:
+            return _tap(result, trace, injected)
+        _finish(trace, result)
         return result
 
     method.__tokentriage__ = True

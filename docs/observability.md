@@ -17,6 +17,7 @@ stderr. A failed call writes a `fail` line instead. A summary is logged when the
   2. the LangGraph node name (`langgraph_node`)
   3. `metadata["task"]`
   4. the first user tag on the run
+- **Streamed calls** (LangChain, Anthropic SDK, OpenAI SDK) get their `done` line, with tokens and cost, when the stream ends or is closed. A stream you abandon without closing is recorded when it is garbage-collected; one cut off early shows the tokens received so far. For OpenAI streams tokentriage adds `stream_options={"include_usage": True}` (only for OpenAI itself, and only if you did not set `stream_options`) and hides the extra usage-only chunk from your code.
 - **`user=`** appears when `metadata["tokentriage_user"]` (or `user_id`) is set.
 - **The quoted text** is the start of the user prompt, already redacted. Set `log_prompt_chars=0` to leave it out.
 - **`via lev-local` / `via heuristic`** says what made the decision. `configured` is the model your code asked for.

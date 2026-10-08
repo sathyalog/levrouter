@@ -7,6 +7,7 @@ machine or a private network unless allow_remote_lev is set, and then https is r
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 import time
@@ -20,6 +21,8 @@ from .base import LEV_QUESTIONS, Signals, signals_from_answers
 class UnsafeLevEndpoint(ValueError):
     """The lev-http URL would send prompts somewhere this config does not allow."""
 
+
+log = logging.getLogger("tokentriage")
 
 # A name with no dot, such as a Docker Compose service ("lev") or a Kubernetes one ("lev-service").
 _SERVICE_NAME = re.compile(r"[a-z][a-z0-9_-]*")
@@ -51,6 +54,25 @@ def check_endpoint(url: str, allow_remote: bool) -> None:
         raise UnsafeLevEndpoint(f"remote lev_url must use https, got {url!r}")
 
 
+def _request_headers(token: str, header_env: dict[str, str] | None) -> dict[str, str]:
+    """Bearer token plus the configured headers, whose values come from environment variables.
+
+    `header_env` maps a header name to the NAME of an environment variable, so no secret is ever in a config
+    file. A variable that is not set is skipped with a warning that names the variable, never a value.
+    A `lev_headers` entry called Authorization replaces the Bearer header.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    for header, var in (header_env or {}).items():
+        value = os.environ.get(var)
+        if not value:
+            log.warning("tokentriage: lev_headers: environment variable %s is not set, so header %s is not sent", var, header)
+            continue
+        for existing in [h for h in headers if h.lower() == header.lower()]:
+            del headers[existing]
+        headers[header] = value
+    return headers
+
+
 class LevHttpClassifier:
     name = "lev-http"
 
@@ -61,25 +83,25 @@ class LevHttpClassifier:
         api_key: str | None = None,
         allow_remote: bool = False,
         redact_input: bool = True,
+        headers: dict[str, str] | None = None,
     ):
         import httpx
 
         check_endpoint(base_url, allow_remote)
         self.redact_input = redact_input
         token = api_key or os.environ.get("TOKENTRIAGE_LEV_API_KEY") or "local"
-        headers = {"Authorization": f"Bearer {token}"}
-        # Modal proxy auth tokens: Modal's gateway checks these two headers before the request reaches the server.
-        modal_key = os.environ.get("TOKENTRIAGE_MODAL_KEY")
-        modal_secret = os.environ.get("TOKENTRIAGE_MODAL_SECRET")
-        if modal_key and modal_secret:
-            headers["Modal-Key"] = modal_key
-            headers["Modal-Secret"] = modal_secret
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_s,
-            headers=headers,
+            headers=_request_headers(token, headers),
             follow_redirects=False,  # a redirect could carry the prompt to another host
         )
+
+    def warmup(self, timeout_s: float = 120.0) -> None:
+        """One throwaway request, so a scale-to-zero server starts before the first real call (it can take ~30 s)."""
+        self._client.post(
+            "/v1/systemone", json={"state": "hello", "questions": LEV_QUESTIONS}, timeout=timeout_s
+        ).raise_for_status()
 
     def classify(self, features: RequestFeatures, state: str) -> Signals:
         start = time.perf_counter()

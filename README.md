@@ -331,10 +331,23 @@ router:
 ```
 
 - **Remote servers.** For a server outside your private network, set `allow_remote_lev: true`; tokentriage then requires an `https://` URL, because request text is sent to it. Docker and Kubernetes service names (`http://lev:8000`, `http://lev-service:8000`) count as private, so they need neither.
-- **Authentication.** `lev serve` has no authentication of its own. tokentriage sends `Authorization: Bearer $TOKENTRIAGE_LEV_API_KEY`, so put the server behind something that checks that header (a reverse proxy, or a private Hugging Face Space with an HF token as the key).
+- **Authentication.** `lev serve` has no authentication of its own, so put it behind something that checks credentials (a reverse proxy, an API gateway, Modal proxy auth, a private Hugging Face Space). tokentriage can send them two ways, alone or together:
+  - `TOKENTRIAGE_LEV_API_KEY` is sent as `Authorization: Bearer <key>`. This covers most reverse proxies and a private Hugging Face Space (the HF token is the key).
+  - `lev_headers` sends any other headers. It maps each header name to the *name* of an environment variable, so the config file holds no secret and the values are read from the environment at startup. A header whose variable is not set is skipped with a warning that names the variable. An entry named `Authorization` replaces the Bearer header.
+
+    ```yaml
+    router:
+      backend: lev-http
+      lev_url: https://your-workspace--lev-server-serve.modal.run
+      allow_remote_lev: true
+      lev_headers:                  # Modal proxy auth tokens; any host that wants headers works the same way
+        Modal-Key: MODAL_KEY        # export MODAL_KEY=wk-...
+        Modal-Secret: MODAL_SECRET  # export MODAL_SECRET=ws-...
+    ```
+
+    Environment variables belong to a shell session, not to a folder: export them in the terminal, container or process manager that runs your app, or put the `export` lines in your shell profile so every new terminal has them. Cloudflare Access (`CF-Access-Client-Id` / `CF-Access-Client-Secret`) and custom gateways work the same way.
 - **Redaction.** Personal data is redacted from the text sent to a lev-http server by default (`redact_classifier_input: true`).
-- **Modal.** A Modal web endpoint protected by [proxy auth tokens](https://modal.com/docs/guide/webhook-proxy-auth) needs two headers. Set `TOKENTRIAGE_MODAL_KEY` (`wk-...`) and `TOKENTRIAGE_MODAL_SECRET` (`ws-...`) as environment variables; tokentriage then sends `Modal-Key` and `Modal-Secret` with every request. Both must be set, they are never read from a config file, and `lev_url` must be `https://` with `allow_remote_lev: true`. Environment variables belong to one shell session, not to a folder: export them in the same terminal (or process manager, or container) that runs your app, or put them in your shell profile to keep them across sessions.
-- **Cold start.** A serverless server that has scaled to zero took 30–34 s on its first call (measured on Modal, two runs). Warm calls took 0.74–1.01 s, so the default `timeout_s` of 1.5 held for all 21 warm calls; use 2.0 if your network is slower than a laptop on home broadband. The cold first call falls back to the heuristic, which is the intended behaviour; later calls use lev. Keep the server warm (for example `min_containers=1` on Modal) if you can't accept heuristic routing after idle periods.
+- **Cold start.** A serverless server that has scaled to zero took 30–34 s on its first call (measured on Modal, two runs). Warm calls took 0.74–1.01 s, so the default `timeout_s` of 1.5 held for all 21 warm calls; use 2.0 if your network is slower than a laptop on home broadband. The cold first call falls back to the heuristic, which is the intended behaviour; later calls use lev. To start the server ahead of time, set `warm_on_load: true`: `load_config()` then sends one background request (billable, off by default) and never waits for it. Or keep a container warm (for example `min_containers=1` on Modal).
 
 The full endpoint rules and what leaves your process: [docs/security.md](docs/security.md#lev-http-endpoint-rules).
 
@@ -463,8 +476,8 @@ With `backend: lev-local` and `block_on_load: true` this also loads lev (~10 GB 
 | Framework | Status |
 |-----------|--------|
 | LangChain chat models (`ChatAnthropic`, `ChatOpenAI`, `ChatGoogleGenerativeAI`, `ChatGroq`, `ChatDeepSeek`, `ChatMistralAI`, `ChatXAI`, `ChatHuggingFace`, `ChatOpenRouter`) | ✅ Routed: `invoke`, `stream`, async, `bind_tools`, `with_structured_output`, chains |
-| Anthropic SDK (`frameworks: [anthropic]`) | ✅ Routed: `client.messages.create`, `.stream`, `.parse`, sync and async, including clients created before `load_config()` |
-| OpenAI SDK (`frameworks: [openai]`) | ✅ Routed: `client.chat.completions.create`, `.stream`, `.parse`, sync and async. Also for OpenAI-compatible endpoints the client points at (OpenRouter, Groq, DeepSeek, xAI, Mistral, Gemini), always within that provider's models |
+| Anthropic SDK (`frameworks: [anthropic]`) | ✅ Routed: `client.messages.create`, `.stream`, `.parse`, sync and async, including clients created before `load_config()`. Streamed calls are counted in usage when the stream ends or is closed |
+| OpenAI SDK (`frameworks: [openai]`) | ✅ Routed: `client.chat.completions.create`, `.stream`, `.parse`, sync and async. Also for OpenAI-compatible endpoints the client points at (OpenRouter, Groq, DeepSeek, xAI, Mistral, Gemini), always within that provider's models. Streamed calls are counted in usage when the stream ends or is closed |
 | Llama Index | Routed through the Anthropic and OpenAI SDK integrations above (not tested with Llama Index itself) |
 
 With both LangChain and an SDK framework enabled, a LangChain call is routed once, at the LangChain layer; the SDK call it makes underneath isn't routed again. Using Llama Index? See [docs/llama_index.md](docs/llama_index.md).
@@ -478,13 +491,11 @@ Never routed: embeddings, fine-tuned or custom models (`ft:*` and others in `nev
 - **Routing can pick a pricier model.** With the default `allow_upgrade: true`, a hard request sent to Sonnet can be moved up to Opus. Set `allow_upgrade: false` if the model in your code must be the most you pay for.
 - **Every supported chat model in the process is routed**, including ones created inside other libraries you use. Limit this with `providers: [...]` or `tokentriage.exclude(llm)`, or opt in single instances with `tokentriage.route(llm)` instead of `load_config()`.
 - **`load_config()` blocks startup with lev-local.** The first run waits for the ~9.5 GB download, and every run waits for lev to load. Plan for this in containers and serverless functions.
-- **lev-http on a scale-to-zero server falls back to the heuristic for the first call after idle.** Measured cold start on Modal: 30–34 s, against a default `timeout_s` of 1.5. Your app is not slowed (the call times out and uses the heuristic) and later calls use lev, but that first request is routed by the heuristic. Keep one container warm to avoid it.
-- **A timed-out lev decision keeps running in the background.** The call it belonged to has already fallen back, but decisions run one at a time, so the next calls may wait behind it and also fall back. On a machine that is too slow for lev, expect most calls to use the heuristic.
+- **A lev-http server that scaled to zero can't answer its first call in time.** Measured cold start on Modal: 30–34 s, against a default `timeout_s` of 1.5. Your app is not slowed (the call times out and uses the heuristic) and later calls use lev, but that first request is routed by the heuristic. Set `warm_on_load: true` or keep one container warm to avoid it.
 - **Conversation memory is per process.** With several workers or replicas, a conversation whose calls reach different ones loses its sticky model; use session affinity at your load balancer (see [docs/deployment.md](docs/deployment.md)).
 - **lev is installed from its GitHub main branch**, so a new lev commit can change behaviour. For reproducible installs, pin lev to a commit (`...lev.git@<commit>#subdirectory=packages/lev`).
 - **Default tier models are built in** (see [How it works](#how-it-works)). If a provider retires one of those ids, calls to that tier fail. `tokentriage models refresh` makes `load_config()` warn about this; fix it under `models:`.
-- **Streamed SDK calls aren't counted in usage yet.** Streams through the Anthropic and OpenAI SDK integrations are routed and logged, but their tokens and cost don't reach `tokentriage usage`. LangChain streams are counted.
-- **Startup output is printed with `print()`,** not logging, so it can't be silenced through `log_level`. Importing tokentriage without lev installed also prints a long install guide.
+- **The lev installation guide and download progress are still printed** with `print()`, not logged, so `log_level` doesn't silence them. All other startup messages go through the `tokentriage` logger (to stderr, honouring `log_level`; with `log_level: null` they go to your app's logging).
 
 ---
 

@@ -1,28 +1,48 @@
-"""lev-http client headers: Modal proxy-auth tokens are sent only when both are set."""
+"""lev-http client headers: configured as {header: ENV VAR NAME}, values read from the environment."""
+
+import logging
 
 from tokentriage.classifiers.lev_http import LevHttpClassifier
 
 
-def _headers(monkeypatch, key=None, secret=None):
-    for name, value in (("TOKENTRIAGE_MODAL_KEY", key), ("TOKENTRIAGE_MODAL_SECRET", secret)):
-        if value is None:
-            monkeypatch.delenv(name, raising=False)
-        else:
-            monkeypatch.setenv(name, value)
-    return LevHttpClassifier(base_url="https://x.modal.run", allow_remote=True)._client.headers
+def _headers(monkeypatch, env=None, header_env=None):
+    for name in ("MODAL_KEY", "MODAL_SECRET", "OTHER_SECRET", "TOKENTRIAGE_LEV_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in (env or {}).items():
+        monkeypatch.setenv(name, value)
+    return LevHttpClassifier(base_url="https://x.example.com", allow_remote=True, headers=header_env)._client.headers
 
 
-def test_modal_headers_sent_when_both_set(monkeypatch):
-    h = _headers(monkeypatch, "wk-test", "ws-test")
+def test_configured_headers_are_read_from_the_named_variables(monkeypatch):
+    h = _headers(monkeypatch, {"MODAL_KEY": "wk-test", "MODAL_SECRET": "ws-test"},
+                 {"Modal-Key": "MODAL_KEY", "Modal-Secret": "MODAL_SECRET"})
     assert h["Modal-Key"] == "wk-test" and h["Modal-Secret"] == "ws-test"
-    assert h["Authorization"].startswith("Bearer ")
+    assert h["Authorization"] == "Bearer local"
 
 
-def test_modal_headers_absent_by_default(monkeypatch):
+def test_no_extra_headers_by_default(monkeypatch):
     h = _headers(monkeypatch)
-    assert "Modal-Key" not in h and "Modal-Secret" not in h
+    assert "Modal-Key" not in h and h["Authorization"] == "Bearer local"
 
 
-def test_modal_headers_need_both(monkeypatch):
-    h = _headers(monkeypatch, key="wk-test")
-    assert "Modal-Key" not in h
+def test_bearer_key_still_works(monkeypatch):
+    assert _headers(monkeypatch, {"TOKENTRIAGE_LEV_API_KEY": "hf_abc"})["Authorization"] == "Bearer hf_abc"
+
+
+def test_authorization_entry_replaces_the_bearer_header(monkeypatch):
+    h = _headers(monkeypatch, {"OTHER_SECRET": "Basic abc"}, {"authorization": "OTHER_SECRET"})
+    assert h["authorization"] == "Basic abc"
+    assert [k for k in h if k.lower() == "authorization"] == ["authorization"]
+
+
+def test_unset_variable_is_skipped_with_a_warning_naming_the_variable_only(monkeypatch, caplog):
+    with caplog.at_level(logging.WARNING, logger="tokentriage"):
+        h = _headers(monkeypatch, {"MODAL_KEY": "wk-secret-value"}, {"Modal-Key": "MODAL_KEY", "Modal-Secret": "MODAL_SECRET"})
+    assert "Modal-Key" in h and "Modal-Secret" not in h
+    assert "MODAL_SECRET" in caplog.text and "wk-secret-value" not in caplog.text
+
+
+def test_secret_values_are_not_in_the_classifier_repr(monkeypatch):
+    monkeypatch.setenv("MODAL_KEY", "wk-secret-value")
+    c = LevHttpClassifier(base_url="https://x.example.com", allow_remote=True, headers={"Modal-Key": "MODAL_KEY"})
+    assert "wk-secret-value" not in repr(c)
