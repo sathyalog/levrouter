@@ -26,8 +26,8 @@ from .config_loader import env_kill_switch, load_config, resolve_config
 from .setup_check import validate_setup
 from .cli_setup import setup_interactive
 
-# Run setup validation on import
-validate_setup()
+# The lev installation guide is shown only when lev-local is actually built (router.build_classifier),
+# not on import: lev-http and heuristic users don't need lev installed.
 
 log = logging.getLogger("tokentriage")
 

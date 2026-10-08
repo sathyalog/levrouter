@@ -69,3 +69,32 @@ def test_signals_from_lev_answer_dicts():
     }
     s = signals_from_answers(answers, "lev-http", 12.0)
     assert s.tier["simple"] == 0.8 and s.needs_reasoning == 0.1
+
+
+def test_importing_tokentriage_does_not_print_the_lev_install_guide():
+    import subprocess
+    import sys
+
+    code = "import sys, importlib.util; sys.modules['lev'] = None; import tokentriage"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and "PREREQUISITE" not in out.stdout + out.stderr
+
+
+def test_install_guide_is_shown_only_when_lev_local_is_built(monkeypatch, capsys):
+    from tokentriage import setup_check
+    from tokentriage.router import build_classifier
+
+    shown = []
+    monkeypatch.setattr(setup_check, "_is_lev_installed", lambda: False)
+    monkeypatch.setattr(setup_check, "_get_project_root", lambda: None)
+    monkeypatch.setattr(setup_check, "_check_pip_list", lambda: False)
+    monkeypatch.setattr(setup_check, "show_lev_installation_guide", lambda: shown.append(1))
+    monkeypatch.delattr(setup_check.validate_setup, "_checked", raising=False)
+
+    build_classifier(RouterConfig(backend="lev-http", lev_url="http://localhost:8000"))
+    build_classifier(RouterConfig(backend="heuristic"))
+    assert shown == []
+    build_classifier(RouterConfig(backend="lev-local"))
+    build_classifier(RouterConfig(backend="lev-local"))
+    assert shown == [1], "shown once, only for lev-local"
+    monkeypatch.delattr(setup_check.validate_setup, "_checked", raising=False)

@@ -51,6 +51,9 @@ class Decision:
 def build_classifier(cfg: RouterConfig) -> Classifier:
     if cfg.backend == "lev-local":
         from .classifiers.lev_local import LevLocalClassifier
+        from .setup_check import validate_setup
+
+        validate_setup()  # once per process: shows the install guide if lev is missing
 
         return LevLocalClassifier(cfg.lev_checkpoint, cfg.timeout_s, cfg.block_on_load)
     if cfg.backend == "lev-http":

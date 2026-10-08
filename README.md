@@ -520,8 +520,8 @@ Check that `TOKENTRIAGE_ENABLED` isn't set to `false` in the environment, and th
 **The download is slow or stopped**
 Re-running resumes where it stopped. To keep the ~9.5 GB elsewhere, set `HF_HOME` (e.g. `export HF_HOME=/Volumes/Drive/huggingface`) before running. Setting `HF_TOKEN` avoids anonymous Hugging Face rate limits.
 
-**A big "LEV PREREQUISITE NOT FOUND" message on import**
-lev isn't installed. Install it (see [Installation](#installation)), or use `backend: heuristic`; routing still works either way.
+**A big "LEV PREREQUISITE NOT FOUND" message**
+It appears only when the `lev-local` backend is built and lev isn't installed (not on import, and never for `lev-http` or `heuristic`). Install lev (see [Installation](#installation)), or use `backend: lev-http` or `heuristic`; routing still works either way.
 
 ---
 
