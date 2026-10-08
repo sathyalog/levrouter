@@ -67,10 +67,17 @@ class LevHttpClassifier:
         check_endpoint(base_url, allow_remote)
         self.redact_input = redact_input
         token = api_key or os.environ.get("TOKENTRIAGE_LEV_API_KEY") or "local"
+        headers = {"Authorization": f"Bearer {token}"}
+        # Modal proxy auth tokens: Modal's gateway checks these two headers before the request reaches the server.
+        modal_key = os.environ.get("TOKENTRIAGE_MODAL_KEY")
+        modal_secret = os.environ.get("TOKENTRIAGE_MODAL_SECRET")
+        if modal_key and modal_secret:
+            headers["Modal-Key"] = modal_key
+            headers["Modal-Secret"] = modal_secret
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_s,
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
             follow_redirects=False,  # a redirect could carry the prompt to another host
         )
 

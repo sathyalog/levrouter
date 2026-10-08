@@ -48,7 +48,7 @@ Tiers are configurable per provider (see [Configuration](#configuration)). Befor
 | | `heuristic` | `lev-local` | `lev-http` |
 |---|---|---|---|
 | **Decides with** | keyword and length rules | lev, inside your app | lev on a server you run (`lev serve`) |
-| **Time per decision** | ~1 ms | tens of ms on a GPU (lev reports 69 ms on an H100); seconds on a CPU | network round trip plus the server's time (lev reports 414–654 ms from a laptop to an H100 in the cloud) |
+| **Time per decision** | ~1 ms | tens of ms on a GPU (lev reports 69 ms on an H100); seconds on a CPU | network round trip plus the server's time. Measured on Modal from a laptop (22 requests, no errors): 0.74–1.01 s per call once the server is warm (median 0.81 s, none over 1.5 s), and 30–34 s for the first call after it was idle (lev reports 414–654 ms to an H100 in the cloud) |
 | **Download and disk** | none | ~9.5 GB on first run, cached in `~/.cache/huggingface` | none on the app's machine |
 | **Memory** | none | ~10 GB free RAM, or a GPU | none on the app's machine |
 | **Works offline** | ✅ | ✅ after the first download | ✅ on a private network (needs the server) |
@@ -56,7 +56,7 @@ Tiers are configurable per provider (see [Configuration](#configuration)). Befor
 | **Falls back to the heuristic** on error or timeout | n/a | ✅ | ✅ |
 | **Best for** | development, or when lev isn't available | a machine with a GPU or plenty of RAM | small machines, containers, many app instances |
 
-lev's authors report 68.9% on their S1Bench decision benchmark; tokentriage has no published routing-accuracy figure yet. To measure routing quality on your own prompts, use [evaluation mode](docs/evaluation.md).
+In a 22-request check against a Modal-hosted server, the top tier matched what we expected for 6 of 6 trivial prompts (simple), 5 of 6 routine ones (standard; "five name ideas for a note-taking app" came back simple at 0.58), and 6 of 6 hard ones (complex, 0.88–0.96). Four prompts containing an email, phone number or SSN were decided with low confidence (top tier 0.34–0.50, spread across tiers), so don't rely on lev for prompts that are mostly personal data. That is a small, hand-labelled sample, not a benchmark. lev's authors report 68.9% on their S1Bench decision benchmark; tokentriage has no published routing-accuracy figure yet. To measure routing quality on your own prompts, use [evaluation mode](docs/evaluation.md).
 
 Whatever the backend, if a decision fails or takes longer than `timeout_s`, that call falls back to the heuristic, so your app never waits longer than `timeout_s` for a decision.
 
@@ -333,6 +333,8 @@ router:
 - **Remote servers.** For a server outside your private network, set `allow_remote_lev: true`; tokentriage then requires an `https://` URL, because request text is sent to it. Docker and Kubernetes service names (`http://lev:8000`, `http://lev-service:8000`) count as private, so they need neither.
 - **Authentication.** `lev serve` has no authentication of its own. tokentriage sends `Authorization: Bearer $TOKENTRIAGE_LEV_API_KEY`, so put the server behind something that checks that header (a reverse proxy, or a private Hugging Face Space with an HF token as the key).
 - **Redaction.** Personal data is redacted from the text sent to a lev-http server by default (`redact_classifier_input: true`).
+- **Modal.** A Modal web endpoint protected by [proxy auth tokens](https://modal.com/docs/guide/webhook-proxy-auth) needs two headers. Set `TOKENTRIAGE_MODAL_KEY` (`wk-...`) and `TOKENTRIAGE_MODAL_SECRET` (`ws-...`) as environment variables; tokentriage then sends `Modal-Key` and `Modal-Secret` with every request. Both must be set, they are never read from a config file, and `lev_url` must be `https://` with `allow_remote_lev: true`. Environment variables belong to one shell session, not to a folder: export them in the same terminal (or process manager, or container) that runs your app, or put them in your shell profile to keep them across sessions.
+- **Cold start.** A serverless server that has scaled to zero took 30–34 s on its first call (measured on Modal, two runs). Warm calls took 0.74–1.01 s, so the default `timeout_s` of 1.5 held for all 21 warm calls; use 2.0 if your network is slower than a laptop on home broadband. The cold first call falls back to the heuristic, which is the intended behaviour; later calls use lev. Keep the server warm (for example `min_containers=1` on Modal) if you can't accept heuristic routing after idle periods.
 
 The full endpoint rules and what leaves your process: [docs/security.md](docs/security.md#lev-http-endpoint-rules).
 
@@ -476,6 +478,7 @@ Never routed: embeddings, fine-tuned or custom models (`ft:*` and others in `nev
 - **Routing can pick a pricier model.** With the default `allow_upgrade: true`, a hard request sent to Sonnet can be moved up to Opus. Set `allow_upgrade: false` if the model in your code must be the most you pay for.
 - **Every supported chat model in the process is routed**, including ones created inside other libraries you use. Limit this with `providers: [...]` or `tokentriage.exclude(llm)`, or opt in single instances with `tokentriage.route(llm)` instead of `load_config()`.
 - **`load_config()` blocks startup with lev-local.** The first run waits for the ~9.5 GB download, and every run waits for lev to load. Plan for this in containers and serverless functions.
+- **lev-http on a scale-to-zero server falls back to the heuristic for the first call after idle.** Measured cold start on Modal: 30–34 s, against a default `timeout_s` of 1.5. Your app is not slowed (the call times out and uses the heuristic) and later calls use lev, but that first request is routed by the heuristic. Keep one container warm to avoid it.
 - **A timed-out lev decision keeps running in the background.** The call it belonged to has already fallen back, but decisions run one at a time, so the next calls may wait behind it and also fall back. On a machine that is too slow for lev, expect most calls to use the heuristic.
 - **Conversation memory is per process.** With several workers or replicas, a conversation whose calls reach different ones loses its sticky model; use session affinity at your load balancer (see [docs/deployment.md](docs/deployment.md)).
 - **lev is installed from its GitHub main branch**, so a new lev commit can change behaviour. For reproducible installs, pin lev to a commit (`...lev.git@<commit>#subdirectory=packages/lev`).
