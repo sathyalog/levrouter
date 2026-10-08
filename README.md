@@ -488,14 +488,10 @@ Never routed: embeddings, fine-tuned or custom models (`ft:*` and others in `nev
 
 ## Known limitations
 
-- **Routing can pick a pricier model.** With the default `allow_upgrade: true`, a hard request sent to Sonnet can be moved up to Opus. Set `allow_upgrade: false` if the model in your code must be the most you pay for.
-- **Every supported chat model in the process is routed**, including ones created inside other libraries you use. Limit this with `providers: [...]` or `tokentriage.exclude(llm)`, or opt in single instances with `tokentriage.route(llm)` instead of `load_config()`.
 - **`load_config()` blocks startup with lev-local.** The first run waits for the ~9.5 GB download, and every run waits for lev to load. Plan for this in containers and serverless functions.
-- **A lev-http server that scaled to zero can't answer its first call in time.** Measured cold start on Modal: 30–34 s, against a default `timeout_s` of 1.5. Your app is not slowed (the call times out and uses the heuristic) and later calls use lev, but that first request is routed by the heuristic. Set `warm_on_load: true` or keep one container warm to avoid it.
 - **Conversation memory is per process.** With several workers or replicas, a conversation whose calls reach different ones loses its sticky model; use session affinity at your load balancer (see [docs/deployment.md](docs/deployment.md)).
 - **lev is installed from its GitHub main branch**, so a new lev commit can change behaviour. For reproducible installs, pin lev to a commit (`...lev.git@<commit>#subdirectory=packages/lev`).
 - **Default tier models are built in** (see [How it works](#how-it-works)). If a provider retires one of those ids, calls to that tier fail. `tokentriage models refresh` makes `load_config()` warn about this; fix it under `models:`.
-- **The lev installation guide and download progress are still printed** with `print()`, not logged, so `log_level` doesn't silence them. All other startup messages go through the `tokentriage` logger (to stderr, honouring `log_level`; with `log_level: null` they go to your app's logging).
 
 ---
 
