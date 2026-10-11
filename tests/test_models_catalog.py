@@ -1,4 +1,4 @@
-"""Keeping model data current: catalogue fallback, `tokentriage models refresh`, startup tier check."""
+"""Keeping model data current: catalogue fallback, `levrouter models refresh`, startup tier check."""
 
 import io
 import json
@@ -6,9 +6,9 @@ import urllib.request
 
 import pytest
 
-from tokentriage import providers
-from tokentriage.__main__ import MODEL_LISTS, main
-from tokentriage.config_loader import load_config
+from levrouter import providers
+from levrouter.__main__ import MODEL_LISTS, main
+from levrouter.config_loader import load_config
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +59,7 @@ def test_startup_warns_about_tier_models_the_key_cannot_use(tmp_path, capsys):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"providers": {"anthropic": ["claude-haiku-4-5-20251001", "claude-sonnet-5-5",
                                                             "claude-opus-5-5"]}}))
-    yaml_file = tmp_path / "tokentriage.yaml"
+    yaml_file = tmp_path / "levrouter.yaml"
     yaml_file.write_text("router:\n  backend: heuristic\n")
     load_config(str(yaml_file), auto_enable=False)
     out = capsys.readouterr().err

@@ -12,7 +12,7 @@ import logging
 from ..converters.openai import extract
 from ._sdk_common import SdkPatches
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 _patches = SdkPatches(allowed=frozenset({"openai", "openrouter", "groq", "deepseek", "xai", "mistral", "gemini"}))
 
@@ -25,7 +25,7 @@ def install(providers: tuple[str, ...]) -> list[str]:
     try:
         from openai.resources.chat.completions import AsyncCompletions, Completions
     except ImportError:
-        log.debug("tokentriage: openai SDK not installed; skipping")
+        log.debug("levrouter: openai SDK not installed; skipping")
         return []
     _patches.enabled.update(wanted)
     _patches.patch((Completions, AsyncCompletions), ("create", "stream", "parse"), extract)

@@ -2,7 +2,7 @@
 point at, and the cheapest -> most capable model ladder inside that provider.
 
 Model ids and prices were checked against each provider's docs in September 2026.
-They change often: override any tier with `models:` in tokentriage.yaml or RouterConfig(tiers=...).
+They change often: override any tier with `models:` in levrouter.yaml or RouterConfig(tiers=...).
 Prices are USD per 1M tokens (input, output) and only feed the savings estimate.
 """
 
@@ -190,13 +190,13 @@ OPENROUTER_FAMILIES: dict[str, dict[str, str]] = {
 
 
 def openrouter_catalog_path() -> Path:
-    """User copy written by `tokentriage openrouter refresh`, if present."""
-    home = os.environ.get("TOKENTRIAGE_HOME") or str(Path.home() / ".tokentriage")
+    """User copy written by `levrouter openrouter refresh`, if present."""
+    home = os.environ.get("LEVROUTER_HOME") or str(Path.home() / ".levrouter")
     return Path(home).expanduser() / "openrouter_models.json"
 
 
 def available_models_path() -> Path:
-    """Model ids each provider's API reported for your key, written by `tokentriage models refresh`."""
+    """Model ids each provider's API reported for your key, written by `levrouter models refresh`."""
     return openrouter_catalog_path().with_name("available_models.json")
 
 
@@ -209,7 +209,7 @@ def openrouter_catalog() -> dict[str, dict]:
     except OSError:
         raw = None
     if raw is None:
-        raw = resources.files("tokentriage").joinpath("data", "openrouter_models.json").read_text()
+        raw = resources.files("levrouter").joinpath("data", "openrouter_models.json").read_text()
     return json.loads(raw)["models"]
 
 
@@ -294,7 +294,7 @@ def spec_for(provider: str, model: str) -> ModelSpec | None:
     """Capabilities and prices of a model, understanding dated ids and OpenRouter slugs.
 
     Direct providers use the built-in list first, then the OpenRouter catalogue (refreshed by
-    `tokentriage models refresh`), so new models still get prices and guardrail checks.
+    `levrouter models refresh`), so new models still get prices and guardrail checks.
     """
     if provider == "openrouter":
         return _catalog_spec(model)

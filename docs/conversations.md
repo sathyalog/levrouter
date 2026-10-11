@@ -13,19 +13,19 @@ Example with a 40,000-token cached prefix (Sonnet 5 $2/M input, Haiku 4.5 $1/M):
 
 The "cheaper" model cost about 6× more for that turn's input. So with `sticky_threads: true` (the default), a conversation keeps its model. It may move **up** a tier when a harder question arrives, never down. The log reason shows `sticky thread: kept complex`.
 
-## How tokentriage knows the conversation
+## How levrouter knows the conversation
 
 | Source | How |
 |---|---|
 | LangGraph | `config={"configurable": {"thread_id": ...}}` is used automatically |
-| Plain LangChain | `llm.invoke(question, config={"metadata": {"tokentriage_thread": conversation_id}})` |
+| Plain LangChain | `llm.invoke(question, config={"metadata": {"levrouter_thread": conversation_id}})` |
 | Anthropic / OpenAI SDK | No thread id: every call is routed on its own (re-asked questions still move up, see below) |
 
 A conversation keeps its model until it has been quiet for `thread_ttl_s` seconds (default 300, Anthropic's default cache lifetime; use 3600 with the 1-hour cache). Up to 10,000 conversations are remembered in memory per process.
 
 ## Moving up when the user re-asks
 
-A user asking the same thing again usually means the answer wasn't good enough. tokentriage compares the latest user message with the earlier user messages **in the same request**. Chat apps send the history with each call, so this needs no thread id and no stored state.
+A user asking the same thing again usually means the answer wasn't good enough. levrouter compares the latest user message with the earlier user messages **in the same request**. Chat apps send the history with each call, so this needs no thread id and no stored state.
 
 - **A repeat** is an earlier message sharing at least half of the meaningful words (3+ letters, common words ignored). The latest message must have at least 3 such words, so "thanks" or "ok" never count.
 - **Retry phrases** also count once: "try again", "that's wrong", "not what I asked", "still wrong", "doesn't work", "wrong answer", "you didn't answer".
@@ -44,7 +44,7 @@ A user asking the same thing again usually means the answer wasn't good enough. 
 
 | Need | How |
 |---|---|
-| A specific tier for one call (the conversation then stays on it) | `config={"metadata": {"tokentriage_tier": "simple"}}` (or `standard` / `complex`) |
-| The model written in your code, for one call | `config={"metadata": {"tokentriage_disable": True}}` |
-| Start the conversation over, e.g. after trimming or summarising history | `tokentriage.reset_thread(conversation_id)`, or use a new thread id |
+| A specific tier for one call (the conversation then stays on it) | `config={"metadata": {"levrouter_tier": "simple"}}` (or `standard` / `complex`) |
+| The model written in your code, for one call | `config={"metadata": {"levrouter_disable": True}}` |
+| Start the conversation over, e.g. after trimming or summarising history | `levrouter.reset_thread(conversation_id)`, or use a new thread id |
 | Turn the behaviours off | `sticky_threads: false`, `escalate_after_repeats: 0` |

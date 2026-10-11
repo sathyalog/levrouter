@@ -17,7 +17,7 @@ from .features import RequestFeatures
 from .providers import canonical_id, openrouter_vendor, price_of, same_model, spec_for
 from .repeats import repeat_count
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,7 @@ class Router:
             kind = "timeout" if isinstance(exc, (TimeoutError, FutureTimeout)) else type(exc).__name__
             if kind not in self._warned:
                 self._warned.add(kind)
-                log.warning("tokentriage: %s classifier failed (%s: %s); using heuristic", self.classifier.name, kind, exc)
+                log.warning("levrouter: %s classifier failed (%s: %s); using heuristic", self.classifier.name, kind, exc)
             signals = self._fallback.classify(features, state)
             note = f"fallback after {self.classifier.name} {kind}; "
             # Do not cache fallback answers: lev should get the next identical request.

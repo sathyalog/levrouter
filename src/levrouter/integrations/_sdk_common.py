@@ -17,11 +17,11 @@ from typing import Any, Callable
 from .. import tracing
 from ..providers import OPENROUTER_HOSTS, PROVIDERS, host_of, openrouter_vendor, spec_for
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 # True while a routed call runs, so the SDK call made inside a routed LangChain call (or an SDK
 # method that calls another one) is not routed and counted a second time.
-ROUTED: ContextVar[bool] = ContextVar("tokentriage_routed", default=False)
+ROUTED: ContextVar[bool] = ContextVar("levrouter_routed", default=False)
 
 
 _failed: set[str] = set()
@@ -30,12 +30,12 @@ _failed: set[str] = set()
 def fail_open(where: str, exc: Exception) -> None:
     """Routing itself failed: the call goes to the configured model. Warn the first time, then stay quiet."""
     if where in _failed:
-        log.debug("tokentriage: routing failed for %s", where, exc_info=True)
+        log.debug("levrouter: routing failed for %s", where, exc_info=True)
         return
     _failed.add(where)
-    log.warning("tokentriage: routing failed for %s calls (%s: %s); they use the configured model instead. "
+    log.warning("levrouter: routing failed for %s calls (%s: %s); they use the configured model instead. "
                 "Set log_level: DEBUG for the traceback.", where, type(exc).__name__, exc)
-    log.debug("tokentriage: routing failure details", exc_info=True)
+    log.debug("levrouter: routing failure details", exc_info=True)
 
 
 def provider_for(client: Any, allowed: frozenset[str], extra_hosts: dict[str, str] | None) -> str | None:
@@ -136,7 +136,7 @@ def _finish(trace: Any, result: Any, error: BaseException | None = None) -> None
     try:
         tracing.end(trace, _usage(result), lc._State.telemetry, error)
     except Exception:  # noqa: BLE001 - observability must never break the app's call
-        log.debug("tokentriage: tracing failed", exc_info=True)
+        log.debug("levrouter: tracing failed", exc_info=True)
 
 
 _INPUT_FIELDS = ("input_tokens", "prompt_tokens")
@@ -162,7 +162,7 @@ def _observe(acc: dict, event: Any) -> None:
         _merge(acc, getattr(event, "usage", None))  # Anthropic message_delta, OpenAI final chunk
         _merge(acc, getattr(getattr(event, "message", None), "usage", None))  # Anthropic message_start
     except Exception:  # noqa: BLE001 - counting tokens must never break the app's stream
-        log.debug("tokentriage: could not read stream usage", exc_info=True)
+        log.debug("levrouter: could not read stream usage", exc_info=True)
 
 
 def _snapshot_usage(stream: Any) -> dict:
@@ -373,7 +373,7 @@ def _tap(result: Any, trace: Any, hide_usage_chunk: bool) -> Any:
         if has("__iter__"):
             return _SyncStream(result, trace, hide_usage_chunk)
     except Exception:  # noqa: BLE001 - never break the app's call
-        log.debug("tokentriage: could not wrap stream", exc_info=True)
+        log.debug("levrouter: could not wrap stream", exc_info=True)
     return result
 
 
@@ -416,7 +416,7 @@ def _wrap(orig: Callable, allowed: frozenset[str], enabled: set[str], extract: C
         _finish(trace, result)
         return result
 
-    method.__tokentriage__ = True
+    method.__levrouter__ = True
     return method
 
 
@@ -432,7 +432,7 @@ class SdkPatches:
         for cls in classes:
             for name in names:
                 orig = cls.__dict__.get(name)
-                if orig is None or getattr(orig, "__tokentriage__", False):
+                if orig is None or getattr(orig, "__levrouter__", False):
                     continue
                 setattr(cls, name, _wrap(orig, self.allowed, self.enabled, extract))
                 self.patches.append((cls, name, orig))

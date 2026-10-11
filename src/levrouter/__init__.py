@@ -1,13 +1,13 @@
-"""tokentriage: pick the cheapest capable model per request, inside the same provider.
+"""levrouter: pick the cheapest capable model per request, inside the same provider.
 
 Powered by lev (https://github.com/InterfazeAI/lev) from the InterfazeAI team: every routing
 decision is made by lev, and this package is a thin wrapper that applies those decisions to
 LangChain chat models.
 
-    import tokentriage
-    tokentriage.enable()                       # every supported chat model call is routed
+    import levrouter
+    levrouter.enable()                       # every supported chat model call is routed
 
-    llm = tokentriage.route(ChatAnthropic(model="claude-opus-5-5"))   # or opt in one instance
+    llm = levrouter.route(ChatAnthropic(model="claude-opus-5-5"))   # or opt in one instance
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from .cli_setup import setup_interactive
 # The lev installation guide is shown only when lev-local is actually built (router.build_classifier),
 # not on import: lev-http and heuristic users don't need lev installed.
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 __all__ = [
     "DEFAULT_TIERS",
@@ -94,7 +94,7 @@ def _usage_unavailable(what: str, home: Any, exc: OSError) -> None:
     """The data folder can't be used (read-only filesystem, no home folder): say so once and go on."""
     if what not in _usage_warned:
         _usage_warned.add(what)
-        log.warning("tokentriage: turning off %s: %s is not usable (%s). Set TOKENTRIAGE_HOME to a writable folder, "
+        log.warning("levrouter: turning off %s: %s is not usable (%s). Set LEVROUTER_HOME to a writable folder, "
                     "or set usage_file / usage_live to false.", what, home, exc.strerror or exc)
 
 
@@ -144,8 +144,8 @@ def enable(
 ) -> list[str]:
     """Route every supported chat model call in this process.
 
-    With no config, the settings come from tokentriage.yaml (found like load_config does), then the
-    TOKENTRIAGE_ENABLED / _BACKEND / _MODE / _LOG_LEVEL overrides. TOKENTRIAGE_ENABLED=false turns routing
+    With no config, the settings come from levrouter.yaml (found like load_config does), then the
+    LEVROUTER_ENABLED / _BACKEND / _MODE / _LOG_LEVEL overrides. LEVROUTER_ENABLED=false turns routing
     off whatever config is passed.
 
     providers: which providers to route (default: the file's, else all, including "openrouter").
@@ -157,14 +157,14 @@ def enable(
     if config is None and router is None:
         resolved = resolve_config()
         if not resolved.enabled:
-            log.info("tokentriage: disabled (enabled: false or TOKENTRIAGE_ENABLED=false); not routing")
+            log.info("levrouter: disabled (enabled: false or LEVROUTER_ENABLED=false); not routing")
             return []
         if _lc._State.router is None:
             config = resolved.cfg
         frameworks = frameworks or resolved.frameworks
         providers = providers or resolved.providers
     elif env_kill_switch():
-        log.info("tokentriage: disabled by TOKENTRIAGE_ENABLED=false; not routing")
+        log.info("levrouter: disabled by LEVROUTER_ENABLED=false; not routing")
         return []
     frameworks = frameworks or ("langchain",)
     providers = providers or _DEFAULT_PROVIDERS
@@ -197,7 +197,7 @@ def route(llm: M, config: RouterConfig | None = None, *, router: Router | None =
     target = _lc.target_for(llm)
     if target is None:
         supported = ", ".join(sorted(_lc.TARGETS))
-        raise TypeError(f"tokentriage.route() supports {supported}; got {type(llm).__name__}")
+        raise TypeError(f"levrouter.route() supports {supported}; got {type(llm).__name__}")
     _configure(config, router)
     provider, why = resolve_provider(llm, target, _lc._State.router.config.provider_hosts)
     if provider is None:
@@ -235,7 +235,7 @@ def usage(since: str | None = "24h", by: str = "model", user: str | None = None,
     """This process's token usage and estimated cost from memory (last 24h at most).
 
     by: "model" | "provider" | "tier" | "task" | "user". Filter with user= (the value passed as
-    metadata={"tokentriage_user": ...}) to show an end user their own usage in your app's UI.
+    metadata={"levrouter_user": ...}) to show an end user their own usage in your app's UI.
     """
     store = _UsageState.memory
     if store is None:
@@ -258,7 +258,7 @@ def eval_report(since: str | None = "24h", by: str = "tier", user: str | None = 
 
 def usage_report(since: str | None = "24h", by: str = "model", user: str | None = None, task: str | None = None) -> str:
     """usage() as a printable table."""
-    return _usage.format_table(usage(since, by, user, task), title=f"tokentriage usage, last {since or '24h'} (this process)")
+    return _usage.format_table(usage(since, by, user, task), title=f"levrouter usage, last {since or '24h'} (this process)")
 
 
 def reset_thread(thread_id: str) -> None:

@@ -3,10 +3,10 @@
 from conftest import COMPLEX, SIMPLE, FixedClassifier
 from langchain_core.messages import HumanMessage
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage import router as router_module
-from tokentriage.features import extract
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter import router as router_module
+from levrouter.features import extract
 
 
 def _router(**cfg):
@@ -67,10 +67,10 @@ def test_langchain_thread_metadata(monkeypatch):
 
     monkeypatch.setattr(ChatAnthropic, "_generate", _fake_generate)
     clf = FixedClassifier(COMPLEX)
-    tokentriage.enable(router=Router(RouterConfig(), clf))
+    levrouter.enable(router=Router(RouterConfig(), clf))
     llm = ChatAnthropic(model="claude-sonnet-5", api_key="sk-ant-test")
-    conv = {"metadata": {"tokentriage_thread": "conv-1"}}
-    assert llm.invoke("Design the schema", config=conv).response_metadata["tokentriage"]["model"] == "claude-opus-5-5"
+    conv = {"metadata": {"levrouter_thread": "conv-1"}}
+    assert llm.invoke("Design the schema", config=conv).response_metadata["levrouter"]["model"] == "claude-opus-5-5"
     clf.signals = SIMPLE
-    assert llm.invoke("thanks!", config=conv).response_metadata["tokentriage"]["model"] == "claude-opus-5-5"
-    assert llm.invoke("thanks!").response_metadata["tokentriage"]["model"] == "claude-haiku-4-5"
+    assert llm.invoke("thanks!", config=conv).response_metadata["levrouter"]["model"] == "claude-opus-5-5"
+    assert llm.invoke("thanks!").response_metadata["levrouter"]["model"] == "claude-haiku-4-5"

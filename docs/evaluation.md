@@ -1,6 +1,6 @@
 # Evaluation mode
 
-tokentriage saves money by sending easy requests to cheaper models. Evaluation mode answers the question that
+levrouter saves money by sending easy requests to cheaper models. Evaluation mode answers the question that
 follows: **do the cheaper answers hold up?** It measures this on your own prompts and traffic.
 
 ## Three ways to use it
@@ -8,7 +8,7 @@ follows: **do the cheaper answers hold up?** It measures this on your own prompt
 **1. On a file of prompts (before touching your app)**
 
 ```bash
-tokentriage eval run prompts.jsonl --provider openrouter --model anthropic/claude-opus-5.5 --budget 0.50
+levrouter eval run prompts.jsonl --provider openrouter --model anthropic/claude-opus-5.5 --budget 0.50
 ```
 
 - **Input:** a `.txt` file (one prompt per line) or a `.jsonl` file with `{"prompt": ..., "system": ..., "task": ...}`.
@@ -21,7 +21,7 @@ tokentriage eval run prompts.jsonl --provider openrouter --model anthropic/claud
 **2. In your app, with zero risk**
 
 ```bash
-TOKENTRIAGE_MODE=eval tokentriage run -- python app.py     # or RouterConfig(mode="eval")
+LEVROUTER_MODE=eval levrouter run -- python app.py     # or RouterConfig(mode="eval")
 ```
 
 - With the default `eval_serve="baseline"`, users keep getting the configured model's answer.
@@ -32,12 +32,12 @@ TOKENTRIAGE_MODE=eval tokentriage run -- python app.py     # or RouterConfig(mod
 **3. Reading the results**
 
 ```bash
-tokentriage usage --by task                       # usage table + "Quality of routing" table
-tokentriage eval report --by tier                 # quality only
-tokentriage eval report --log eval.jsonl --regressions 10
+levrouter usage --by task                       # usage table + "Quality of routing" table
+levrouter eval report --by tier                 # quality only
+levrouter eval report --log eval.jsonl --regressions 10
 ```
 
-In code, `tokentriage.eval_report(by="task")` returns the same numbers.
+In code, `levrouter.eval_report(by="task")` returns the same numbers.
 
 ## How answers are compared
 
@@ -75,9 +75,9 @@ serving continues normally. In batch runs, `--budget` caps the whole run, includ
 ## Privacy
 
 - **Eval rows** in the usage files hold only models, verdicts, scores and costs, never text.
-- **Prompts and answers** are written only if you set `eval_log_path` (batch runs create one under `~/.tokentriage/`).
+- **Prompts and answers** are written only if you set `eval_log_path` (batch runs create one under `~/.levrouter/`).
   They're PII-redacted, and the file is created with 0600 permissions.
 
 ---
 
-*tokentriage is powered by [lev](https://github.com/InterfazeAI/lev) from the InterfazeAI team.*
+*levrouter is powered by [lev](https://github.com/InterfazeAI/lev) from the InterfazeAI team.*

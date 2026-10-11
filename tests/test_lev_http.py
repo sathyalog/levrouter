@@ -2,11 +2,11 @@
 
 import logging
 
-from tokentriage.classifiers.lev_http import LevHttpClassifier
+from levrouter.classifiers.lev_http import LevHttpClassifier
 
 
 def _headers(monkeypatch, env=None, header_env=None):
-    for name in ("MODAL_KEY", "MODAL_SECRET", "OTHER_SECRET", "TOKENTRIAGE_LEV_API_KEY"):
+    for name in ("MODAL_KEY", "MODAL_SECRET", "OTHER_SECRET", "LEVROUTER_LEV_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     for name, value in (env or {}).items():
         monkeypatch.setenv(name, value)
@@ -26,7 +26,7 @@ def test_no_extra_headers_by_default(monkeypatch):
 
 
 def test_bearer_key_still_works(monkeypatch):
-    assert _headers(monkeypatch, {"TOKENTRIAGE_LEV_API_KEY": "hf_abc"})["Authorization"] == "Bearer hf_abc"
+    assert _headers(monkeypatch, {"LEVROUTER_LEV_API_KEY": "hf_abc"})["Authorization"] == "Bearer hf_abc"
 
 
 def test_authorization_entry_replaces_the_bearer_header(monkeypatch):
@@ -36,7 +36,7 @@ def test_authorization_entry_replaces_the_bearer_header(monkeypatch):
 
 
 def test_unset_variable_is_skipped_with_a_warning_naming_the_variable_only(monkeypatch, caplog):
-    with caplog.at_level(logging.WARNING, logger="tokentriage"):
+    with caplog.at_level(logging.WARNING, logger="levrouter"):
         h = _headers(monkeypatch, {"MODAL_KEY": "wk-secret-value"}, {"Modal-Key": "MODAL_KEY", "Modal-Secret": "MODAL_SECRET"})
     assert "Modal-Key" in h and "Modal-Secret" not in h
     assert "MODAL_SECRET" in caplog.text and "wk-secret-value" not in caplog.text

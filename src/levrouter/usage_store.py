@@ -1,6 +1,6 @@
 """Last-24h token usage and cost: an in-memory window and rolling hourly files.
 
-Hourly files (default ~/.tokentriage/usage/, override with TOKENTRIAGE_HOME):
+Hourly files (default ~/.levrouter/usage/, override with LEVROUTER_HOME):
 
     usage/2026-09-29T09.jsonl   <- oldest hour kept
     ...
@@ -30,7 +30,7 @@ from dataclasses import MISSING, asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 GROUP_KEYS = ("model", "provider", "tier", "task", "user")
 _HOUR_FMT = "%Y-%m-%dT%H"
@@ -38,11 +38,11 @@ _HOUR_FILE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2})\.jsonl$")
 
 
 def home_dir(override: str | None = None) -> Path:
-    return Path(override or os.environ.get("TOKENTRIAGE_HOME") or Path.home() / ".tokentriage").expanduser()
+    return Path(override or os.environ.get("LEVROUTER_HOME") or Path.home() / ".levrouter").expanduser()
 
 
 def _private_dir(path: Path) -> Path:
-    """Create path (and a missing tokentriage home above it) readable by this user only."""
+    """Create path (and a missing levrouter home above it) readable by this user only."""
     for p in (path.parent, path):
         if not p.exists():
             p.mkdir(parents=True, exist_ok=True)
@@ -256,7 +256,7 @@ class UsageSink:
         except Exception:  # noqa: BLE001 - usage accounting must never break the app's call
             if not self._warned:
                 self._warned = True
-                log.debug("tokentriage: could not record usage", exc_info=True)
+                log.debug("levrouter: could not record usage", exc_info=True)
 
 
 # -- reporting ---------------------------------------------------------------
@@ -473,7 +473,7 @@ def format_table(report: dict, title: str = "") -> str:
         out.append("calls from " + " ".join(span))
     out += [line(header), line(["-" * w for w in widths]), *(line(r) for r in rows[:-1]),
             line(["-" * w for w in widths]), line(rows[-1])]
-    out.append("cost = estimate from tokentriage's price table; 'unrouted' = same tokens on the model your code configured")
+    out.append("cost = estimate from levrouter's price table; 'unrouted' = same tokens on the model your code configured")
     return "\n".join(out)
 
 

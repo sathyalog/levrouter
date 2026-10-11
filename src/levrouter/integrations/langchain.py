@@ -37,7 +37,7 @@ from ..telemetry import Telemetry
 from ..tracing import CallTrace
 from ._sdk_common import ROUTED, fail_open
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 METHODS = ("_generate", "_agenerate", "_stream", "_astream")
 
@@ -57,7 +57,7 @@ class _State:
     in_flight: set[int] = set()
     # (class, reason) pairs already logged as "not routed", so the log is not flooded.
     skip_logged: set[tuple[str, str]] = set()
-    # Evaluation mode (evaluate.Evaluator), set by tokentriage.enable().
+    # Evaluation mode (evaluate.Evaluator), set by levrouter.enable().
     evaluator: Any = None
 
 
@@ -134,7 +134,7 @@ def _plan_unguarded(llm: Any, target: Target, args: tuple, kwargs: dict, stream:
         return None
     messages, run_manager = _split_args(args, kwargs)
     metadata = getattr(run_manager, "metadata", None) or {}
-    if metadata.get("tokentriage_disable"):
+    if metadata.get("levrouter_disable"):
         return None
     cfg = _State.router.config
 
@@ -158,8 +158,8 @@ def _plan_unguarded(llm: Any, target: Target, args: tuple, kwargs: dict, stream:
 
     features = extract(messages, kwargs.get("tools"), kwargs.get("tool_choice"))
     _, max_out = _max_tokens(llm, target)
-    thread = metadata.get("tokentriage_thread") or metadata.get("thread_id")  # LangGraph adds thread_id
-    decision = _State.router.decide(provider, current, features, metadata.get("tokentriage_tier"), max_out,
+    thread = metadata.get("levrouter_thread") or metadata.get("thread_id")  # LangGraph adds thread_id
+    decision = _State.router.decide(provider, current, features, metadata.get("levrouter_tier"), max_out,
                                     thread=str(thread) if thread else None)
     routed_model = decision.model
     routed_updates = _compat_updates(provider, llm, target, routed_model)
@@ -204,7 +204,7 @@ def _evaluate(ev: dict | None, message: Any) -> None:
 
         evaluator.submit(EvalJob(served_message=message, served_usage=dict(getattr(message, "usage_metadata", None) or {}), **ev))
     except Exception:  # noqa: BLE001 - evaluation must never break the app's call
-        log.debug("tokentriage: could not start evaluation", exc_info=True)
+        log.debug("levrouter: could not start evaluation", exc_info=True)
 
 
 def _first_message(result: ChatResult) -> Any:
@@ -221,7 +221,7 @@ def _annotate(result: ChatResult, trace: CallTrace) -> dict | None:
         msg = getattr(gen, "message", None)
         if msg is None:
             continue
-        msg.response_metadata["tokentriage"] = _meta(trace)
+        msg.response_metadata["levrouter"] = _meta(trace)
         usage = usage or getattr(msg, "usage_metadata", None)
     return usage
 
@@ -235,7 +235,7 @@ def _finish(trace: CallTrace, usage: dict | None, error: BaseException | None = 
     try:
         tracing.end(trace, usage, _State.telemetry, error)
     except Exception:  # noqa: BLE001 - observability must never break the app's call
-        log.debug("tokentriage: tracing failed", exc_info=True)
+        log.debug("levrouter: tracing failed", exc_info=True)
 
 
 # -- wrappers ----------------------------------------------------------------
@@ -346,7 +346,7 @@ def _wrap(target: Target, name: str, orig: Any) -> Any:
             try:
                 for chunk in _sdk_off_iter(orig(routed, *args, **kwargs)):
                     if first:
-                        chunk.message.response_metadata["tokentriage"] = _meta(trace)
+                        chunk.message.response_metadata["levrouter"] = _meta(trace)
                         first = False
                     _add_usage(usage, getattr(chunk.message, "usage_metadata", None))
                     if ev is not None:
@@ -380,7 +380,7 @@ def _wrap(target: Target, name: str, orig: Any) -> Any:
         try:
             async for chunk in _sdk_off_aiter(orig(routed, *args, **kwargs)):
                 if first:
-                    chunk.message.response_metadata["tokentriage"] = _meta(trace)
+                    chunk.message.response_metadata["levrouter"] = _meta(trace)
                     first = False
                 _add_usage(usage, getattr(chunk.message, "usage_metadata", None))
                 if ev is not None:
@@ -406,11 +406,11 @@ def patch_class(cls: type, target: Target) -> None:
     """Patch one chat model class. Exposed so tests and custom subclasses can use it."""
     for name in METHODS:
         orig = getattr(cls, name, None)
-        if orig is None or getattr(orig, "__tokentriage__", False):
+        if orig is None or getattr(orig, "__levrouter__", False):
             continue
         had_own = name in cls.__dict__
         wrapped = _wrap(target, name, orig)
-        wrapped.__tokentriage__ = True
+        wrapped.__levrouter__ = True
         setattr(cls, name, wrapped)
         _State.patches.append((cls, name, had_own, orig))
 
@@ -442,7 +442,7 @@ def install(providers: tuple[str, ...]) -> list[str]:
             _State.enabled_providers.add(provider)
             enabled.append(provider)
         else:
-            log.debug("tokentriage: no LangChain package installed for %s; skipping", provider)
+            log.debug("levrouter: no LangChain package installed for %s; skipping", provider)
     return enabled
 
 

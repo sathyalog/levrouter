@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script for tokentriage setup feature."""
+"""Test script for levrouter setup feature."""
 
 import sys
 import tempfile
@@ -17,7 +17,7 @@ def test_cli_setup_module():
     try:
         # Test 1: Import the module
         print("\n✅ Test 1: Import cli_setup module...")
-        from tokentriage.cli_setup import (
+        from levrouter.cli_setup import (
             setup_interactive,
             write_config_file,
             setup_cmd,
@@ -36,7 +36,7 @@ def test_cli_setup_module():
 
         # Test 3: Check __main__ has setup command
         print("\n✅ Test 3: Verify __main__.py has setup handler...")
-        from tokentriage.__main__ import main
+        from levrouter.__main__ import main
         import inspect
         source = inspect.getsource(main)
         assert 'args.command == "setup"' in source, "setup handler not found in main()"
@@ -45,9 +45,9 @@ def test_cli_setup_module():
 
         # Test 4: Check __init__ exports setup_interactive
         print("\n✅ Test 4: Verify __init__.py exports setup_interactive...")
-        from tokentriage import setup_interactive as exported_setup
+        from levrouter import setup_interactive as exported_setup
         assert callable(exported_setup), "setup_interactive not exported from __init__"
-        print("   SUCCESS: setup_interactive is exported from tokentriage module")
+        print("   SUCCESS: setup_interactive is exported from levrouter module")
 
         # Test 5: Test config file writing (without interactive input)
         print("\n✅ Test 5: Test config file writing...")
@@ -65,7 +65,7 @@ def test_cli_setup_module():
                 }
             }
 
-            config_path = Path(tmpdir) / "tokentriage.yaml"
+            config_path = Path(tmpdir) / "levrouter.yaml"
             result = write_config_file(test_config, config_path)
 
             assert result, "write_config_file returned False"
@@ -84,7 +84,7 @@ def test_cli_setup_module():
 
         # Test 6: Verify DEFAULT_TIERS is accessible
         print("\n✅ Test 6: Verify DEFAULT_TIERS accessibility...")
-        from tokentriage.config import DEFAULT_TIERS, TIERS, PROVIDERS
+        from levrouter.config import DEFAULT_TIERS, TIERS, PROVIDERS
         assert isinstance(DEFAULT_TIERS, dict), "DEFAULT_TIERS must be a dict"
         assert "anthropic" in DEFAULT_TIERS, "anthropic not in DEFAULT_TIERS"
         assert "heuristic" in PROVIDERS, "heuristic backend missing"
@@ -97,8 +97,8 @@ def test_cli_setup_module():
         print("=" * 80)
         print("\nSetup feature is ready for use!")
         print("\nUsage:")
-        print("  tokentriage setup")
-        print("  python -c \"from tokentriage import setup_interactive; setup_interactive()\"")
+        print("  levrouter setup")
+        print("  python -c \"from levrouter import setup_interactive; setup_interactive()\"")
 
         return True
 

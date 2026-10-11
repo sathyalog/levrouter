@@ -1,9 +1,9 @@
 from conftest import COMPLEX, SIMPLE, STANDARD, FixedClassifier, signals
 from langchain_core.messages import HumanMessage
 
-from tokentriage import Router, RouterConfig
-from tokentriage.classifiers.base import signals_from_answers
-from tokentriage.features import extract
+from levrouter import Router, RouterConfig
+from levrouter.classifiers.base import signals_from_answers
+from levrouter.features import extract
 
 
 def _features(text="hello"):
@@ -71,18 +71,18 @@ def test_signals_from_lev_answer_dicts():
     assert s.tier["simple"] == 0.8 and s.needs_reasoning == 0.1
 
 
-def test_importing_tokentriage_does_not_print_the_lev_install_guide():
+def test_importing_levrouter_does_not_print_the_lev_install_guide():
     import subprocess
     import sys
 
-    code = "import sys, importlib.util; sys.modules['lev'] = None; import tokentriage"
+    code = "import sys, importlib.util; sys.modules['lev'] = None; import levrouter"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and "PREREQUISITE" not in out.stdout + out.stderr
 
 
 def test_install_guide_is_shown_only_when_lev_local_is_built(monkeypatch, capsys):
-    from tokentriage import setup_check
-    from tokentriage.router import build_classifier
+    from levrouter import setup_check
+    from levrouter.router import build_classifier
 
     shown = []
     monkeypatch.setattr(setup_check, "_is_lev_installed", lambda: False)

@@ -1,8 +1,8 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from tokentriage import Router, RouterConfig
-from tokentriage.classifiers.heuristic import HeuristicClassifier
-from tokentriage.features import extract
+from levrouter import Router, RouterConfig
+from levrouter.classifiers.heuristic import HeuristicClassifier
+from levrouter.features import extract
 
 
 def _model(text, tools=None):

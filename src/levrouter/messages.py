@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 
 class MessageLike(Protocol):
-    """Protocol for anything that looks like a message to tokentriage."""
+    """Protocol for anything that looks like a message to levrouter."""
 
     role: str  # "user", "assistant", "system", "tool"
     content: str | list  # text or list of content blocks

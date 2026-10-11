@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.messages import HumanMessage
 
-from tokentriage import Router, RouterConfig
-from tokentriage.classifiers.base import LEV_QUESTIONS
-from tokentriage.classifiers.lev_local import LevLocalClassifier
-from tokentriage.features import extract
+from levrouter import Router, RouterConfig
+from levrouter.classifiers.base import LEV_QUESTIONS
+from levrouter.classifiers.lev_local import LevLocalClassifier
+from levrouter.features import extract
 
 
 class FakeEngine:

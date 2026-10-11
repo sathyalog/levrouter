@@ -34,9 +34,9 @@ from .config import RouterConfig
 from .features import extract
 from .telemetry import cost_usd
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
-DISABLE = {"metadata": {"tokentriage_disable": True}, "tags": ["tokentriage-eval"]}
+DISABLE = {"metadata": {"levrouter_disable": True}, "tags": ["levrouter-eval"]}
 MAX_TEXT = 6000
 
 JUDGE_SYSTEM = (
@@ -188,7 +188,7 @@ class Evaluator:
     def __init__(self, config: RouterConfig, record, max_workers: int = 2):
         self.config = config
         self._record = record            # callable(entry: dict) -> None
-        self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tokentriage-eval")
+        self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="levrouter-eval")
         self._spent: deque[tuple[float, float]] = deque()
         self._lock = threading.Lock()
         self._pending: set[Future] = set()
@@ -315,7 +315,7 @@ class Evaluator:
             f.write(json.dumps(row) + "\n")
 
 
-# -- batch evaluation: `tokentriage eval run prompts.jsonl` ------------------------------
+# -- batch evaluation: `levrouter eval run prompts.jsonl` ------------------------------
 
 
 def load_prompts(path: str) -> list[dict]:
@@ -358,9 +358,9 @@ def run_batch(llm, prompts: list[dict], evaluator: Evaluator, budget_usd: float,
             break
         messages = ([SystemMessage(row["system"])] if row.get("system") else []) + [HumanMessage(row["prompt"])]
         before = evaluator.spent_24h()
-        reply = llm.invoke(messages, config={"metadata": {"tokentriage_task": row.get("task") or f"prompt-{i}"}})
+        reply = llm.invoke(messages, config={"metadata": {"levrouter_task": row.get("task") or f"prompt-{i}"}})
         evaluator.flush(timeout=600)
-        meta = reply.response_metadata.get("tokentriage", {})
+        meta = reply.response_metadata.get("levrouter", {})
         spent += _cost(meta.get("model", ""), _usage(reply)) + (evaluator.spent_24h() - before)
         if meta.get("model") == meta.get("original_model"):
             skipped_same_model += 1

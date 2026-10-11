@@ -1,8 +1,8 @@
 """What the host application sees: one log line when a call is routed, one when it finishes,
 a summary at exit, and optionally an OpenTelemetry span per call.
 
-    12:01:03 tokentriage INFO  route [c7f1a2] task=summarize "Summarize this contract..." -> claude-haiku-4-5 (simple; configured claude-opus-5-5) via lev-local 41ms
-    12:01:05 tokentriage INFO  done  [c7f1a2] claude-haiku-4-5 in=1830 out=212 1.92s $0.0029 (saved $0.0087 vs claude-opus-5-5)
+    12:01:03 levrouter INFO  route [c7f1a2] task=summarize "Summarize this contract..." -> claude-haiku-4-5 (simple; configured claude-opus-5-5) via lev-local 41ms
+    12:01:05 levrouter INFO  done  [c7f1a2] claude-haiku-4-5 in=1830 out=212 1.92s $0.0029 (saved $0.0087 vs claude-opus-5-5)
 """
 
 from __future__ import annotations
@@ -23,13 +23,13 @@ from .features import RequestFeatures
 from .router import Decision
 from .telemetry import Telemetry, cost_usd
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 _handler: logging.Handler | None = None
 _atexit_registered = False
 _telemetry_for_exit: Telemetry | None = None
 _json = False
-# Receives every finished call for the last-24h usage stores (set by tokentriage.enable()).
+# Receives every finished call for the last-24h usage stores (set by levrouter.enable()).
 _usage_sink = None
 
 
@@ -51,7 +51,7 @@ def setup_logging(cfg: RouterConfig, telemetry: Telemetry) -> None:
     """Make routing visible in the host app's output.
 
     With cfg.log_level=None nothing is configured and records propagate to the app's
-    own logging setup (the "tokentriage" logger).
+    own logging setup (the "levrouter" logger).
     """
     global _handler, _atexit_registered, _telemetry_for_exit, _json
     _json = cfg.log_format == "json"
@@ -64,7 +64,7 @@ def setup_logging(cfg: RouterConfig, telemetry: Telemetry) -> None:
             log.addHandler(_handler)
             # Our handler prints it; do not print it a second time via the root logger.
             log.propagate = False
-        fmt = "%(message)s" if _json else "%(asctime)s tokentriage %(levelname)-5s %(message)s"
+        fmt = "%(message)s" if _json else "%(asctime)s levrouter %(levelname)-5s %(message)s"
         _handler.setFormatter(logging.Formatter(fmt, datefmt="%H:%M:%S"))
 
     if cfg.summary_at_exit and not _atexit_registered:
@@ -117,7 +117,7 @@ class CallTrace:
 
 
 def _task_label(metadata: dict, tags: list[str]) -> str | None:
-    for key in ("tokentriage_task", "langgraph_node", "task", "ls_run_name"):
+    for key in ("levrouter_task", "langgraph_node", "task", "ls_run_name"):
         if metadata.get(key):
             return str(metadata[key])
     user_tags = [t for t in tags if not t.startswith(("seq:", "graph:", "langsmith:"))]
@@ -125,7 +125,7 @@ def _task_label(metadata: dict, tags: list[str]) -> str | None:
 
 
 def _user_label(metadata: dict) -> str | None:
-    for key in ("tokentriage_user", "user_id"):
+    for key in ("levrouter_user", "user_id"):
         if metadata.get(key):
             return str(metadata[key])
     return None
@@ -241,23 +241,23 @@ def _start_span(trace: CallTrace, cfg: RouterConfig) -> Any:
         return None
     d = trace.decision
     attrs = {
-        "tokentriage.call_id": trace.call_id,
-        "tokentriage.provider": d.provider,
-        "tokentriage.tier": d.tier,
-        "tokentriage.model": d.model,
-        "tokentriage.original_model": d.original_model,
-        "tokentriage.reason": d.reason,
+        "levrouter.call_id": trace.call_id,
+        "levrouter.provider": d.provider,
+        "levrouter.tier": d.tier,
+        "levrouter.model": d.model,
+        "levrouter.original_model": d.original_model,
+        "levrouter.reason": d.reason,
         "gen_ai.request.model": d.model,
     }
     if trace.task:
-        attrs["tokentriage.task"] = trace.task
+        attrs["levrouter.task"] = trace.task
     if trace.user:
-        attrs["tokentriage.user"] = trace.user
+        attrs["levrouter.user"] = trace.user
     if d.signals:
-        attrs["tokentriage.source"] = d.signals.source
+        attrs["levrouter.source"] = d.signals.source
         for k, v in d.signals.tier.items():
-            attrs[f"tokentriage.p_{k}"] = round(v, 4)
-    return otel.get_tracer("tokentriage").start_span("tokentriage.call", attributes=attrs)
+            attrs[f"levrouter.p_{k}"] = round(v, 4)
+    return otel.get_tracer("levrouter").start_span("levrouter.call", attributes=attrs)
 
 
 def _end_span(trace: CallTrace, entry: dict, error: BaseException | None) -> None:
@@ -267,10 +267,10 @@ def _end_span(trace: CallTrace, entry: dict, error: BaseException | None) -> Non
     span.set_attribute("gen_ai.usage.input_tokens", entry["input_tokens"])
     span.set_attribute("gen_ai.usage.output_tokens", entry["output_tokens"])
     if entry["cost_usd"] is not None:
-        span.set_attribute("tokentriage.cost_usd", entry["cost_usd"])
+        span.set_attribute("levrouter.cost_usd", entry["cost_usd"])
     if error is not None:
         # record_exception would copy the raw message and stack; store the redacted text instead.
-        span.set_attribute("tokentriage.error", entry["error"])
+        span.set_attribute("levrouter.error", entry["error"])
         from opentelemetry.trace import Status, StatusCode
 
         span.set_status(Status(StatusCode.ERROR, entry["error"]))

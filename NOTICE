@@ -1,4 +1,14 @@
-tokentriage
+levrouter
 Copyright 2026 SathyaManoj Vakacharla
 
 Licensed under the Apache License, Version 2.0; see the LICENSE file.
+
+Acknowledgements
+----------------
+levrouter is built on top of lev, the System 1 decision model created by Interfaze
+(https://interfaze.ai, https://github.com/InterfazeAI/lev). lev is not included in this package;
+it is installed separately and remains the work of its creators under its own licence.
+
+The name "levrouter" is used with the approval of the Interfaze team. Special thanks to
+Abhinav and the entire Interfaze team. levrouter is an independent project and is not
+developed, endorsed or supported by Interfaze.

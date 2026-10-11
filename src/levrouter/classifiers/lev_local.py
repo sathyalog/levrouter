@@ -12,7 +12,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from ..features import RequestFeatures
 from .base import LEV_QUESTIONS, Signals, signals_from_answers
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 
 class LevNotReady(RuntimeError):
@@ -37,7 +37,7 @@ class LevLocalClassifier:
         self.block_on_load = block_on_load
         # One worker: torch forwards are serialized, and a timed-out call does not
         # pile up more work behind it.
-        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tokentriage")
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="levrouter")
         self._abandoned: Future | None = None  # the timed-out decision the worker is still running
         self._abandon_lock = threading.Lock()  # not the class-level load lock, which is held while lev loads
 
@@ -51,7 +51,7 @@ class LevLocalClassifier:
             cls._load_error = ImportError(
                 "lev is not installed. It is a separate prerequisite (not on PyPI): "
                 "pip install \"lev[serve] @ git+https://github.com/InterfazeAI/lev#subdirectory=packages/lev\" "
-                "(Python 3.12+). Until then tokentriage routes with its heuristic."
+                "(Python 3.12+). Until then levrouter routes with its heuristic."
             )
             cls._load_error.__cause__ = exc
             return
@@ -60,10 +60,10 @@ class LevLocalClassifier:
             start = time.perf_counter()
             engine = lev.load(self.checkpoint)
             cls._engine = engine
-            log.info("tokentriage: lev loaded from %s in %.1fs", self.checkpoint, time.perf_counter() - start)
+            log.info("levrouter: lev loaded from %s in %.1fs", self.checkpoint, time.perf_counter() - start)
         except BaseException as exc:  # noqa: BLE001 - surfaced through _load_error
             cls._load_error = exc
-            log.warning("tokentriage: lev failed to load (%s); routing with the heuristic", exc)
+            log.warning("levrouter: lev failed to load (%s); routing with the heuristic", exc)
 
     def warmup(self) -> None:
         """Load lev now, blocking. Call at app startup to avoid first-request latency."""
@@ -85,12 +85,12 @@ class LevLocalClassifier:
             # Block and wait for LEV to fully load
             with self._lock:
                 if cls._engine is None and cls._load_error is None:
-                    log.info("tokentriage: Loading LEV (blocking until ready)...")
+                    log.info("levrouter: Loading LEV (blocking until ready)...")
                     self._load()
             return
         with self._lock:
             if cls._loader is None:
-                cls._loader = threading.Thread(target=self._load, name="tokentriage-load", daemon=True)
+                cls._loader = threading.Thread(target=self._load, name="levrouter-load", daemon=True)
                 cls._loader.start()
 
     @property
@@ -101,7 +101,7 @@ class LevLocalClassifier:
 
     def classify(self, features: RequestFeatures, state: str) -> Signals:
         self._ensure_loading()
-        log.debug("tokentriage: After _ensure_loading(), engine=%s, load_error=%s", type(self)._engine is not None, type(self)._load_error)
+        log.debug("levrouter: After _ensure_loading(), engine=%s, load_error=%s", type(self)._engine is not None, type(self)._load_error)
         cls = type(self)
         if cls._load_error is not None:
             raise cls._load_error
@@ -121,7 +121,7 @@ class LevLocalClassifier:
                 self._abandoned = future
             raise
         elapsed_ms = (time.perf_counter() - start) * 1000
-        log.debug("tokentriage: LEV classify - state_len=%d, elapsed_ms=%.0f, timeout_s=%.1f", len(state), elapsed_ms, self.timeout_s)
+        log.debug("levrouter: LEV classify - state_len=%d, elapsed_ms=%.0f, timeout_s=%.1f", len(state), elapsed_ms, self.timeout_s)
         return signals_from_answers(response.answers, self.name, elapsed_ms)
 
 
@@ -132,6 +132,6 @@ def _warn_device() -> None:
         return
     if not torch.cuda.is_available():
         log.warning(
-            "tokentriage: no CUDA GPU found; lev runs on CPU and each decision may take seconds. "
+            "levrouter: no CUDA GPU found; lev runs on CPU and each decision may take seconds. "
             "Raise timeout_s, or run `lev serve` on a GPU and use backend='lev-http'."
         )

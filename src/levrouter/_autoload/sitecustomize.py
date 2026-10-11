@@ -1,7 +1,7 @@
-"""Loaded by Python at interpreter start-up when `tokentriage run` puts this folder on PYTHONPATH.
+"""Loaded by Python at interpreter start-up when `levrouter run` puts this folder on PYTHONPATH.
 
-Enables tokentriage in a program without editing it; settings come from tokentriage.yaml and the
-TOKENTRIAGE_ENABLED / _BACKEND / _MODE / _LOG_LEVEL variables. Any sitecustomize the environment already had is still run.
+Enables levrouter in a program without editing it; settings come from levrouter.yaml and the
+LEVROUTER_ENABLED / _BACKEND / _MODE / _LOG_LEVEL variables. Any sitecustomize the environment already had is still run.
 """
 
 import os
@@ -19,10 +19,10 @@ for _entry in sys.path:
         runpy.run_path(_candidate, run_name="sitecustomize")
         break
 
-if os.environ.get("TOKENTRIAGE_AUTOENABLE") == "1":
+if os.environ.get("LEVROUTER_AUTOENABLE") == "1":
     try:
-        import tokentriage
+        import levrouter
 
-        tokentriage.enable()
+        levrouter.enable()
     except Exception as exc:  # never stop the user's program from starting
-        print(f"tokentriage: not enabled ({type(exc).__name__}: {exc})", file=sys.stderr)
+        print(f"levrouter: not enabled ({type(exc).__name__}: {exc})", file=sys.stderr)

@@ -1,6 +1,6 @@
 """Redaction of personal data and secrets before anything leaves the call path.
 
-Used on every string tokentriage writes (log lines, the JSONL file, span attributes, error
+Used on every string levrouter writes (log lines, the JSONL file, span attributes, error
 text) and on the classifier state sent to a lev-http server. It is pattern based, so it
 catches structured identifiers (emails, card numbers, keys ...), not names or free-text
 descriptions of people. Treat it as defense in depth, not as an anonymizer.

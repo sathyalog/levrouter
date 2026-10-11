@@ -7,8 +7,8 @@ import pytest
 from conftest import SIMPLE, FixedClassifier
 
 import openai
-import tokentriage
-from tokentriage import Router, RouterConfig
+import levrouter
+from levrouter import Router, RouterConfig
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def sent(monkeypatch):
 
 
 def _enable(**cfg):
-    tokentriage.enable(router=Router(RouterConfig(**cfg), FixedClassifier(SIMPLE)), frameworks=("openai",))
+    levrouter.enable(router=Router(RouterConfig(**cfg), FixedClassifier(SIMPLE)), frameworks=("openai",))
 
 
 def _ask(client, model="gpt-6-astra", **kw):
@@ -47,7 +47,7 @@ def test_sync_create_is_routed_and_counted(sent):
     _enable()
     reply = _ask(openai.OpenAI(api_key="sk-test"))
     assert sent == [("api.openai.com", "gpt-6-luna")] and reply.model == "gpt-6-luna"
-    stats = tokentriage.stats()
+    stats = levrouter.stats()
     assert stats["calls"] == 1 and stats["by_model"] == {"gpt-6-luna": 1}
 
 
@@ -74,8 +74,8 @@ def test_openrouter_endpoint_routes_within_the_vendor(sent):
 def test_unknown_host_and_disable_leave_calls_alone(sent):
     _enable()
     _ask(openai.OpenAI(api_key="sk-test", base_url="https://llm-proxy.example.com/v1"))
-    tokentriage.disable()
-    assert not getattr(openai.resources.chat.completions.Completions.create, "__tokentriage__", False)
+    levrouter.disable()
+    assert not getattr(openai.resources.chat.completions.Completions.create, "__levrouter__", False)
     _ask(openai.OpenAI(api_key="sk-test"))
     assert [m for _, m in sent] == ["gpt-6-astra", "gpt-6-astra"]
 
@@ -83,9 +83,9 @@ def test_unknown_host_and_disable_leave_calls_alone(sent):
 def test_langchain_call_is_not_routed_twice(sent):
     from langchain_openai import ChatOpenAI
 
-    tokentriage.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=("langchain", "openai"))
+    levrouter.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=("langchain", "openai"))
     ChatOpenAI(model="gpt-6-astra", api_key="sk-test").invoke("What is 2+2?")
-    assert [m for _, m in sent] == ["gpt-6-luna"] and tokentriage.stats()["calls"] == 1
+    assert [m for _, m in sent] == ["gpt-6-luna"] and levrouter.stats()["calls"] == 1
 
 
 def test_router_bug_falls_back_to_the_configured_model(sent, monkeypatch):
@@ -95,6 +95,6 @@ def test_router_bug_falls_back_to_the_configured_model(sent, monkeypatch):
         raise RuntimeError("bug inside the router")
 
     monkeypatch.setattr(router, "decide", boom)
-    tokentriage.enable(router=router, frameworks=("openai",))
+    levrouter.enable(router=router, frameworks=("openai",))
     _ask(openai.OpenAI(api_key="sk-test"))
     assert [m for _, m in sent] == ["gpt-6-astra"]

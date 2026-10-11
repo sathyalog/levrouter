@@ -1,13 +1,14 @@
 [project]
-name = "tokentriage"
+name = "levrouter"
 version = "0.1.0"
 description = "Per-request model routing for LangChain chat models (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Hugging Face), powered by lev from InterfazeAI"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Sathya" }]
-keywords = ["llm", "routing", "langchain", "anthropic", "openai", "cost", "lev"]
+keywords = ["llm", "routing", "router", "langchain", "anthropic", "openai", "cost", "lev", "levrouter"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -30,20 +31,20 @@ mistral = ["langchain-mistralai>=1.0"]
 xai = ["langchain-xai>=1.0"]
 huggingface = ["langchain-huggingface>=1.0"]
 openrouter = ["langchain-openrouter>=0.2"]
-providers = ["tokentriage[anthropic,openai,gemini,groq,deepseek,mistral,xai,huggingface,openrouter]"]
+providers = ["levrouter[anthropic,openai,gemini,groq,deepseek,mistral,xai,huggingface,openrouter]"]
 yaml = ["pyyaml>=6"]
 otel = ["opentelemetry-api>=1.20"]
-all = ["tokentriage[http,providers,yaml,otel]"]
-dev = ["tokentriage[providers]", "pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "pyyaml>=6"]
+all = ["levrouter[http,providers,yaml,otel]"]
+dev = ["levrouter[providers]", "pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "pyyaml>=6"]
 
 [project.urls]
-Homepage = "https://github.com/sathyalog/tokentriage"
-Repository = "https://github.com/sathyalog/tokentriage"
-Issues = "https://github.com/sathyalog/tokentriage/issues"
+Homepage = "https://github.com/sathyalog/levrouter"
+Repository = "https://github.com/sathyalog/levrouter"
+Issues = "https://github.com/sathyalog/levrouter/issues"
 "lev (decision model)" = "https://github.com/InterfazeAI/lev"
 
 [project.scripts]
-tokentriage = "tokentriage.__main__:main"
+levrouter = "levrouter.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -51,10 +52,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 # Auto-discover packages from src-layout
-# hatchling automatically finds src/tokentriage
+# hatchling automatically finds src/levrouter
 
 [tool.hatch.build.targets.sdist]
-include = ["src/tokentriage", "tests", "examples", "docs", "assets", "README.md", "LICENSE", "NOTICE", "CONTRIBUTING.md", "RELEASING.md"]
+include = ["/src/levrouter", "/tests", "/examples", "/docs", "/assets", "/README.md", "/LICENSE", "/NOTICE", "/CONTRIBUTING.md", "/RELEASING.md"]
+exclude = ["test_env", ".venv", "dist", "**/__pycache__"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

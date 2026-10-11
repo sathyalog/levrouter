@@ -9,11 +9,11 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_openai import ChatOpenAI
 from langchain_openrouter import ChatOpenRouter
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage.features import extract
-from tokentriage.providers import canonical_id, price_of, spec_for
-from tokentriage.telemetry import cost_usd
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter.features import extract
+from levrouter.providers import canonical_id, price_of, spec_for
+from levrouter.telemetry import cost_usd
 
 KEY = "sk-or-v1-TESTKEY000000000000000000"
 
@@ -30,7 +30,7 @@ def fake_network(monkeypatch):
 
 
 def _enable(sig=SIMPLE, **cfg):
-    tokentriage.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, **cfg), FixedClassifier(sig)))
+    levrouter.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, **cfg), FixedClassifier(sig)))
 
 
 def _decide(model, sig=SIMPLE, text="hi", blocks=(), **cfg):
@@ -58,7 +58,7 @@ def test_chatopenrouter_is_routed_and_keeps_key(fake_network):
     llm = ChatOpenRouter(model="anthropic/claude-opus-5.5", api_key=KEY)
     out = llm.invoke("What is 2+2?")
     assert out.content == "model=anthropic/claude-haiku-4.5"
-    assert out.response_metadata["tokentriage"]["provider"] == "openrouter"
+    assert out.response_metadata["levrouter"]["provider"] == "openrouter"
     assert llm.model_name == "anthropic/claude-opus-5.5"
 
 
@@ -72,14 +72,14 @@ def test_chatopenai_on_openrouter_endpoint(fake_network):
                                    "~anthropic/claude-sonnet-latest", "anthropic/claude-opus-5.5:batch"])
 def test_free_meta_and_alias_models_never_routed(fake_network, caplog, model):
     _enable(SIMPLE)
-    with caplog.at_level(logging.INFO, logger="tokentriage"):
+    with caplog.at_level(logging.INFO, logger="levrouter"):
         assert ChatOpenRouter(model=model, api_key=KEY).invoke("hi").content == f"model={model}"
     assert any("never_route" in r.getMessage() for r in caplog.records)
 
 
 def test_unknown_vendor_is_skipped(fake_network, caplog):
     _enable(SIMPLE)
-    with caplog.at_level(logging.INFO, logger="tokentriage"):
+    with caplog.at_level(logging.INFO, logger="levrouter"):
         out = ChatOpenRouter(model="cohere/command-a", api_key=KEY).invoke("hi")
     assert out.content == "model=cohere/command-a"
     assert any("no OpenRouter family for vendor 'cohere'" in r.getMessage() for r in caplog.records)
@@ -126,7 +126,7 @@ def test_pinned_dated_id_is_kept_when_tier_is_the_same_model():
 
 
 def test_bare_openrouter_names_resolve_to_their_vendor():
-    from tokentriage.providers import openrouter_full_id, openrouter_vendor
+    from levrouter.providers import openrouter_full_id, openrouter_vendor
     assert openrouter_full_id("gpt-4o-mini") == "openai/gpt-4o-mini" and openrouter_vendor("gpt-4o-mini") == "openai"
     assert openrouter_vendor("no-such-model") == "no-such-model"
     assert _decide("gpt-4o-mini", SIMPLE).model == "openai/gpt-6-luna"
@@ -144,7 +144,7 @@ def test_price_cap_keeps_configured_when_nothing_is_cheaper():
 
 def test_chatanthropic_on_openrouter_anthropic_api(fake_network, monkeypatch):
     from langchain_anthropic import ChatAnthropic
-    from tokentriage.providers import openrouter_full_id
+    from levrouter.providers import openrouter_full_id
 
     assert openrouter_full_id("claude-haiku-4-5-20251001") == "anthropic/claude-haiku-4.5"
     assert openrouter_full_id("claude-opus-5-5") == "anthropic/claude-opus-5.5"
@@ -157,11 +157,11 @@ def test_chatanthropic_on_openrouter_anthropic_api(fake_network, monkeypatch):
     llm = ChatAnthropic(model="claude-haiku-4-5-20251001", api_key=KEY, base_url="https://openrouter.ai/api")
     out = llm.invoke("Design a distributed cache")
     assert out.content == "model=anthropic/claude-opus-5.5"
-    assert out.response_metadata["tokentriage"]["provider"] == "openrouter"
+    assert out.response_metadata["levrouter"]["provider"] == "openrouter"
 
 
 def test_same_model_under_two_names_is_not_routed_or_evaluated():
-    from tokentriage.providers import same_model
+    from levrouter.providers import same_model
     assert same_model("openrouter", "claude-sonnet-5", "anthropic/claude-sonnet-5")
     assert same_model("openrouter", "claude-haiku-4-5-20251001", "anthropic/claude-haiku-4.5")
     assert not same_model("openrouter", "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4.5")

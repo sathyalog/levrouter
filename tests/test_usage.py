@@ -11,10 +11,10 @@ from conftest import SIMPLE, FixedClassifier
 from langchain_anthropic import ChatAnthropic
 from test_langchain_patch import fake_network  # noqa: F401 - fixture
 
-import tokentriage
-from tokentriage import Router, RouterConfig, live
-from tokentriage import usage_store as u
-from tokentriage.__main__ import main
+import levrouter
+from levrouter import Router, RouterConfig, live
+from levrouter import usage_store as u
+from levrouter.__main__ import main
 
 HOUR = 3600
 T0 = datetime(2026, 9, 29, 12, 30, tzinfo=timezone.utc).timestamp()
@@ -141,19 +141,19 @@ def test_live_server_answers_and_stale_sockets_removed(tmp_path):
 
 
 def _enable():
-    tokentriage.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False), FixedClassifier(SIMPLE)))
+    levrouter.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False), FixedClassifier(SIMPLE)))
 
 
 def test_calls_land_in_memory_files_and_cli(fake_network, capsys):
     _enable()
     llm = ChatAnthropic(model="claude-opus-5-5", api_key="test")
-    llm.invoke("secret prompt text", config={"metadata": {"tokentriage_task": "faq", "tokentriage_user": "u1"}})
-    llm.invoke("other", config={"metadata": {"tokentriage_task": "faq", "tokentriage_user": "jane@acme.com"}})
+    llm.invoke("secret prompt text", config={"metadata": {"levrouter_task": "faq", "levrouter_user": "u1"}})
+    llm.invoke("other", config={"metadata": {"levrouter_task": "faq", "levrouter_user": "jane@acme.com"}})
 
-    mem = tokentriage.usage(by="user")
+    mem = levrouter.usage(by="user")
     assert {r["user"] for r in mem["rows"]} == {"u1", "[EMAIL]"}
-    assert tokentriage.usage(user="u1")["total"]["calls"] == 1
-    assert "TOTAL" in tokentriage.usage_report(by="task")
+    assert levrouter.usage(user="u1")["total"]["calls"] == 1
+    assert "TOTAL" in levrouter.usage_report(by="task")
 
     home = u.home_dir()
     raw = "".join(p.read_text() for p in (home / "usage").glob("*.jsonl"))
@@ -180,8 +180,8 @@ def test_cli_without_data(capsys, tmp_path):
 
 
 def test_usage_can_be_turned_off(fake_network):
-    tokentriage.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, usage_file=False, usage_live=False),
+    levrouter.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, usage_file=False, usage_live=False),
                                   FixedClassifier(SIMPLE)))
     ChatAnthropic(model="claude-opus-5-5", api_key="test").invoke("hi")
     assert not (u.home_dir() / "usage").exists() and not live.run_dir().exists()
-    assert tokentriage.usage()["total"]["calls"] == 1  # in-process view still works
+    assert levrouter.usage()["total"]["calls"] == 1  # in-process view still works

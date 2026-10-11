@@ -3,11 +3,11 @@
 from conftest import SIMPLE, FixedClassifier
 from langchain_core.messages import AIMessage, HumanMessage
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage.converters.anthropic import extract as extract_anthropic
-from tokentriage.features import RequestFeatures, extract
-from tokentriage.repeats import repeat_count
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter.converters.anthropic import extract as extract_anthropic
+from levrouter.features import RequestFeatures, extract
+from levrouter.repeats import repeat_count
 
 Q1 = "How do I configure retries in the payment client?"
 Q2 = "How do I set up retries for the payment client?"
@@ -64,8 +64,8 @@ def test_escalation_can_be_turned_off_and_overrides_win():
 
 def test_thread_keeps_the_better_model_until_reset():
     router = Router(RouterConfig(), FixedClassifier(SIMPLE))
-    tokentriage.enable(router=router)
+    levrouter.enable(router=router)
     assert _decide(router, _chat(Q1, Q2, Q3), thread="c1").model == "claude-sonnet-5"
     assert _decide(router, _chat(Q1, Q2, Q3, "thanks"), thread="c1").model == "claude-sonnet-5"
-    tokentriage.reset_thread("c1")
+    levrouter.reset_thread("c1")
     assert _decide(router, _chat(Q1, Q2, Q3, "thanks"), thread="c1").model == "claude-haiku-4-5"

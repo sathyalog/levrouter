@@ -8,8 +8,8 @@ import pytest
 from conftest import SIMPLE, FixedClassifier
 
 import anthropic
-import tokentriage
-from tokentriage import Router, RouterConfig, tracing
+import levrouter
+from levrouter import Router, RouterConfig, tracing
 
 
 def _sse(*events: tuple[str, dict]) -> str:
@@ -73,7 +73,7 @@ def wire(monkeypatch):
 
 @pytest.fixture
 def ended(monkeypatch):
-    """(usage, error) for every call tokentriage finished recording."""
+    """(usage, error) for every call levrouter finished recording."""
     records: list[tuple[dict | None, BaseException | None]] = []
     real = tracing.end
 
@@ -86,7 +86,7 @@ def ended(monkeypatch):
 
 
 def _enable(*frameworks):
-    tokentriage.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=frameworks)
+    levrouter.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=frameworks)
 
 
 def _anthropic_args():
@@ -110,7 +110,7 @@ def test_anthropic_create_stream_records_usage_when_exhausted(wire, ended):
     events = list(anthropic.Anthropic(api_key="sk-ant-test").messages.create(stream=True, **_anthropic_args()))
     assert [e.type for e in events][0] == "message_start" and events[-1].type == "message_stop"
     assert len(ended) == 1 and _tokens(ended[0]) == (11, 7) and ended[0][1] is None
-    assert tokentriage.stats()["cost_usd"] > 0
+    assert levrouter.stats()["cost_usd"] > 0
 
 
 def test_anthropic_early_close_still_records_once(wire, ended):

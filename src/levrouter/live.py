@@ -1,7 +1,7 @@
 """Live, in-memory usage over a local Unix socket (no network port, no web route).
 
-Each app process that enabled tokentriage listens on <run dir>/<pid>.sock, in a directory only
-its user can open (0700). `tokentriage usage --live` connects to every socket there, asks each
+Each app process that enabled levrouter listens on <run dir>/<pid>.sock, in a directory only
+its user can open (0700). `levrouter usage --live` connects to every socket there, asks each
 process for its in-memory last-24h report, and merges the answers. Numbers live only in
 memory, so they reset when the process restarts; the rolling hourly files cover that case.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import usage_store as usage
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 MAX_REQUEST = 4096
 # macOS limits Unix socket paths to 104 bytes (Linux 108); leave room for "<pid>.sock".
@@ -32,13 +32,13 @@ SUPPORTED = hasattr(socket, "AF_UNIX")
 
 
 def run_dir(home: str | Path | None = None) -> Path:
-    """Socket directory for a tokentriage home. Falls back to a short, deterministic temp path
+    """Socket directory for a levrouter home. Falls back to a short, deterministic temp path
     when the home path is too long for a socket address."""
     base = usage.home_dir(str(home) if home else None) / "run"
     if len(str(base)) <= _MAX_DIR_LEN:
         return base
     digest = hashlib.sha256(str(base).encode()).hexdigest()[:10]
-    return Path(tempfile.gettempdir()) / f"tokentriage-{os.getuid() if hasattr(os, 'getuid') else 'u'}-{digest}"
+    return Path(tempfile.gettempdir()) / f"levrouter-{os.getuid() if hasattr(os, 'getuid') else 'u'}-{digest}"
 
 
 def _answer(store: usage.MemoryStore, request: dict) -> dict:
@@ -68,7 +68,7 @@ class LiveServer:
 
     def start(self) -> bool:
         if not SUPPORTED:
-            log.info("tokentriage: this platform has no Unix sockets; `tokentriage usage --live` is unavailable")
+            log.info("levrouter: this platform has no Unix sockets; `levrouter usage --live` is unavailable")
             return False
         usage._private_dir(self.dir)
         try:
@@ -95,12 +95,12 @@ class LiveServer:
         try:
             self._server = Server(str(self.path), Handler)
         except OSError as exc:
-            log.info("tokentriage: live usage socket not started (%s)", exc)
+            log.info("levrouter: live usage socket not started (%s)", exc)
             return False
         os.chmod(self.path, 0o600)
         # Short poll interval so stop() (disable(), process exit) returns promptly.
         self._thread = threading.Thread(
-            target=self._server.serve_forever, kwargs={"poll_interval": 0.05}, name="tokentriage-live", daemon=True
+            target=self._server.serve_forever, kwargs={"poll_interval": 0.05}, name="levrouter-live", daemon=True
         )
         self._thread.start()
         atexit.register(self.stop)
@@ -128,7 +128,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 def query_all(directory: Path, request: dict, timeout: float = 2.0) -> list[dict]:
-    """Ask every live tokentriage process in `directory`. Removes stale socket files."""
+    """Ask every live levrouter process in `directory`. Removes stale socket files."""
     if not SUPPORTED or not directory.is_dir():
         return []
     answers = []

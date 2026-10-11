@@ -35,7 +35,7 @@ class RouterConfig:
     backend: Backend = "lev-local"
     lev_checkpoint: str = "interfaze-ai/lev"
     lev_url: str = "http://localhost:8000"
-    # Bearer token for a protected `lev serve`. Read from TOKENTRIAGE_LEV_API_KEY; never logged.
+    # Bearer token for a protected `lev serve`. Read from LEVROUTER_LEV_API_KEY; never logged.
     lev_api_key: str | None = field(default=None, repr=False)
     # lev-http only: extra request headers for a protected server, as {header name: ENV VAR NAME}.
     # The file holds only variable names; the values are read from the environment, so no secret is committed.
@@ -58,7 +58,7 @@ class RouterConfig:
     block_on_load: bool = False
     cache_size: int = 1024
     # Keep one conversation on one model so the provider's prompt cache keeps working: a thread
-    # (LangGraph thread_id, or metadata={"tokentriage_thread": ...}) can move up a tier, never down.
+    # (LangGraph thread_id, or metadata={"levrouter_thread": ...}) can move up a tier, never down.
     sticky_threads: bool = True
     # Idle seconds before a thread may change model again: Anthropic's default prompt-cache lifetime
     # (set 3600 when using the 1-hour cache).
@@ -80,7 +80,7 @@ class RouterConfig:
     # Keep routed models within context window / input types (image, PDF, audio, video) / tool support;
     # bump the tier otherwise.
     capability_guard: bool = True
-    # Redact PII and secrets from everything tokentriage writes (logs, JSONL, spans).
+    # Redact PII and secrets from everything levrouter writes (logs, JSONL, spans).
     redact_pii: bool = True
     # lev-http only: allow a lev server that is not on this machine / private network.
     # Prompts are sent to it, so it is off by default; when on, https is required.
@@ -97,7 +97,7 @@ class RouterConfig:
     # Per-vendor tier overrides, merged over the defaults.
     openrouter_families: dict[str, dict[str, str]] = field(default_factory=dict)
 
-    # -- evaluation (see tokentriage/evaluate.py) -------------------------------
+    # -- evaluation (see levrouter/evaluate.py) -------------------------------
     # "eval": for a sample of calls, also run the other model and have a judge compare the answers.
     mode: Mode = "route"
     eval_sample_rate: float = 0.2
@@ -112,7 +112,7 @@ class RouterConfig:
     eval_log_path: str | None = None
 
     # -- observability ----------------------------------------------------------
-    # Level for the "tokentriage" logger, printed to stderr. None: configure nothing and
+    # Level for the "levrouter" logger, printed to stderr. None: configure nothing and
     # let records propagate to the host app's own logging setup.
     log_level: str | None = "INFO"
     log_format: Literal["text", "json"] = "text"
@@ -125,14 +125,14 @@ class RouterConfig:
     # Emit an OpenTelemetry span per call when opentelemetry-api is installed.
     otel: bool = True
 
-    # -- usage (last 24h, see tokentriage/usage_store.py) ---------------------------------
-    # Rolling hourly files under <usage_home>/usage/, read by `tokentriage usage`.
+    # -- usage (last 24h, see levrouter/usage_store.py) ---------------------------------
+    # Rolling hourly files under <usage_home>/usage/, read by `levrouter usage`.
     usage_file: bool = True
-    # In-memory window answered over a local socket, read by `tokentriage usage --live`.
+    # In-memory window answered over a local socket, read by `levrouter usage --live`.
     usage_live: bool = True
     usage_retention_hours: int = 24
     usage_memory_max: int = 100_000
-    # Default: $TOKENTRIAGE_HOME, else ~/.tokentriage
+    # Default: $LEVROUTER_HOME, else ~/.levrouter
     usage_home: str | None = None
 
     def __post_init__(self) -> None:

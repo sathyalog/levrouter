@@ -4,8 +4,8 @@ import pytest
 from conftest import SIMPLE, FixedClassifier
 from langchain_core.messages import HumanMessage
 
-from tokentriage import Router, RouterConfig
-from tokentriage.features import block_kind, extract
+from levrouter import Router, RouterConfig
+from levrouter.features import block_kind, extract
 
 B64 = "iVBORw0KGgo="
 
@@ -86,7 +86,7 @@ def test_video_moves_up_to_a_capable_tier():
 
 
 def test_forced_tool_calls_avoid_models_that_reject_them():
-    from tokentriage.features import is_forced_tool_choice
+    from levrouter.features import is_forced_tool_choice
     from conftest import COMPLEX
 
     assert is_forced_tool_choice({"type": "tool", "name": "Profile"}) and is_forced_tool_choice("any")

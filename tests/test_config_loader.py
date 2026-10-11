@@ -3,11 +3,11 @@
 import pytest
 import yaml
 
-import tokentriage
-from tokentriage import RouterConfig, cli_setup, config_loader, lev_download
-from tokentriage.__main__ import main
-from tokentriage.config_loader import find_config_file, load_config, resolve_config
-from tokentriage.integrations import langchain as lc
+import levrouter
+from levrouter import RouterConfig, cli_setup, config_loader, lev_download
+from levrouter.__main__ import main
+from levrouter.config_loader import find_config_file, load_config, resolve_config
+from levrouter.integrations import langchain as lc
 
 YAML = """
 enabled: true
@@ -31,7 +31,7 @@ def _fresh_warning_state(monkeypatch):
 
 
 def _load(tmp_path, text, **kwargs):
-    path = tmp_path / "tokentriage.yaml"
+    path = tmp_path / "levrouter.yaml"
     path.write_text(text)
     return load_config(str(path), **kwargs)[0]
 
@@ -115,24 +115,24 @@ def test_failed_download_reports_false(monkeypatch, capsys):
 # -- one settings source: the file, plus a few environment variables -----------------------------------------
 
 
-def _file(tmp_path, text, name="tokentriage.yaml"):
+def _file(tmp_path, text, name="levrouter.yaml"):
     path = tmp_path / name
     path.write_text(text)
     return path
 
 
-def test_tokentriage_config_variable_picks_the_file(tmp_path, monkeypatch):
+def test_levrouter_config_variable_picks_the_file(tmp_path, monkeypatch):
     other = _file(tmp_path, "router:\n  backend: heuristic\n  timeout_s: 9\n", "prod.yaml")
-    monkeypatch.setenv("TOKENTRIAGE_CONFIG", str(other))
+    monkeypatch.setenv("LEVROUTER_CONFIG", str(other))
     resolved = resolve_config()
     assert resolved.source == other and resolved.cfg.timeout_s == 9.0
 
 
 def test_kept_variables_beat_the_file_and_the_file_beats_defaults(tmp_path, monkeypatch):
     path = _file(tmp_path, "router:\n  backend: heuristic\n  timeout_s: 7\n  log_level: INFO\n")
-    monkeypatch.setenv("TOKENTRIAGE_BACKEND", "lev-http")
-    monkeypatch.setenv("TOKENTRIAGE_LOG_LEVEL", "debug")
-    monkeypatch.setenv("TOKENTRIAGE_MODE", "eval")
+    monkeypatch.setenv("LEVROUTER_BACKEND", "lev-http")
+    monkeypatch.setenv("LEVROUTER_LOG_LEVEL", "debug")
+    monkeypatch.setenv("LEVROUTER_MODE", "eval")
     cfg = resolve_config(path).cfg
     assert (cfg.backend, cfg.log_level, cfg.mode) == ("lev-http", "DEBUG", "eval")
     assert cfg.timeout_s == 7.0 and cfg.thread_ttl_s == 300  # file value, then the default
@@ -140,19 +140,19 @@ def test_kept_variables_beat_the_file_and_the_file_beats_defaults(tmp_path, monk
 
 def test_invalid_override_values_are_ignored_with_a_warning(tmp_path, monkeypatch, capsys):
     path = _file(tmp_path, "router:\n  backend: heuristic\n")
-    monkeypatch.setenv("TOKENTRIAGE_BACKEND", "banana")
+    monkeypatch.setenv("LEVROUTER_BACKEND", "banana")
     assert resolve_config(path).cfg.backend == "heuristic"
-    assert "TOKENTRIAGE_BACKEND='banana' ignored" in capsys.readouterr().err
+    assert "LEVROUTER_BACKEND='banana' ignored" in capsys.readouterr().err
 
 
 def test_removed_variables_are_ignored_and_warned_about(tmp_path, monkeypatch, capsys):
     path = _file(tmp_path, "router:\n  backend: heuristic\n")
-    monkeypatch.setenv("TOKENTRIAGE_MIN_TIER", "standard")
-    monkeypatch.setenv("TOKENTRIAGE_OPENAI_SIMPLE", "gpt-4o-mini")
+    monkeypatch.setenv("LEVROUTER_MIN_TIER", "standard")
+    monkeypatch.setenv("LEVROUTER_OPENAI_SIMPLE", "gpt-4o-mini")
     cfg = resolve_config(path).cfg
     assert cfg.min_tier is None and cfg.tiers["openai"]["simple"] != "gpt-4o-mini"
     out = capsys.readouterr().err
-    assert "no longer used" in out and "TOKENTRIAGE_MIN_TIER" in out and "TOKENTRIAGE_OPENAI_SIMPLE" in out
+    assert "no longer used" in out and "LEVROUTER_MIN_TIER" in out and "LEVROUTER_OPENAI_SIMPLE" in out
     resolve_config(path)
     assert "no longer used" not in capsys.readouterr().err  # said once
 
@@ -161,30 +161,30 @@ def test_lev_api_key_in_a_file_is_dropped(tmp_path, capsys):
     path = _file(tmp_path, "router:\n  backend: lev-http\n  lev_api_key: s3cret-value\n")
     cfg = resolve_config(path).cfg
     out = capsys.readouterr().err
-    assert cfg.lev_api_key is None and "TOKENTRIAGE_LEV_API_KEY" in out and "s3cret-value" not in out
+    assert cfg.lev_api_key is None and "LEVROUTER_LEV_API_KEY" in out and "s3cret-value" not in out
 
 
 def test_enabled_variable_is_a_kill_switch(tmp_path, monkeypatch):
     path = _file(tmp_path, "router:\n  backend: heuristic\n")
-    monkeypatch.setenv("TOKENTRIAGE_ENABLED", "false")
+    monkeypatch.setenv("LEVROUTER_ENABLED", "false")
     assert resolve_config(path).enabled is False
     load_config(str(path))
     assert lc._State.router is None
-    assert tokentriage.enable() == [] and tokentriage.enable(RouterConfig(backend="heuristic")) == []
+    assert levrouter.enable() == [] and levrouter.enable(RouterConfig(backend="heuristic")) == []
     assert lc._State.router is None
-    monkeypatch.setenv("TOKENTRIAGE_ENABLED", "true")
+    monkeypatch.setenv("LEVROUTER_ENABLED", "true")
     assert resolve_config(path).enabled is True
 
 
 def test_enable_without_arguments_reads_the_yaml(tmp_path, monkeypatch):
     _file(tmp_path, "router:\n  backend: heuristic\n  escalate_after_repeats: 5\nframeworks: [langchain]\n")
     monkeypatch.chdir(tmp_path)
-    assert "anthropic" in tokentriage.enable()
+    assert "anthropic" in levrouter.enable()
     assert lc._State.router.config.escalate_after_repeats == 5
 
 
 def test_config_search_ignores_the_data_folder(tmp_path, monkeypatch):
-    (tmp_path / ".tokentriage").mkdir()  # ~/.tokentriage is the data folder, not a config file
+    (tmp_path / ".levrouter").mkdir()  # ~/.levrouter is the data folder, not a config file
     monkeypatch.chdir(tmp_path)
     assert find_config_file(tmp_path) is None
     assert resolve_config().source is None
@@ -245,11 +245,11 @@ def test_lev_headers_that_is_not_a_mapping_is_ignored(tmp_path, capsys):
 
 
 def test_env_vars_named_under_lev_headers_are_not_reported_as_removed(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("TOKENTRIAGE_MODAL_KEY", "wk-x")
-    monkeypatch.setenv("TOKENTRIAGE_SOMETHING_ELSE", "1")
-    _load(tmp_path, "router:\n  backend: heuristic\n  lev_headers:\n    Modal-Key: TOKENTRIAGE_MODAL_KEY\n", auto_enable=False)
+    monkeypatch.setenv("LEVROUTER_MODAL_KEY", "wk-x")
+    monkeypatch.setenv("LEVROUTER_SOMETHING_ELSE", "1")
+    _load(tmp_path, "router:\n  backend: heuristic\n  lev_headers:\n    Modal-Key: LEVROUTER_MODAL_KEY\n", auto_enable=False)
     err = capsys.readouterr().err
-    assert "TOKENTRIAGE_SOMETHING_ELSE" in err and "TOKENTRIAGE_MODAL_KEY" not in err
+    assert "LEVROUTER_SOMETHING_ELSE" in err and "LEVROUTER_MODAL_KEY" not in err
 
 
 def test_startup_messages_respect_log_level(tmp_path, capsys):
@@ -268,7 +268,7 @@ def test_startup_warnings_appear_at_the_default_level_on_stderr_not_stdout(tmp_p
 def test_log_level_none_hands_startup_messages_to_the_apps_logging(tmp_path, capsys, caplog):
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="tokentriage"):
+    with caplog.at_level(logging.WARNING, logger="levrouter"):
         _load(tmp_path, "router:\n  backend: heuristic\n  log_level: null\n  bogus_key: 1\n", auto_enable=False)
     captured = capsys.readouterr()
     assert captured.out == "" and captured.err == "" and "bogus_key" in caplog.text
@@ -277,7 +277,7 @@ def test_log_level_none_hands_startup_messages_to_the_apps_logging(tmp_path, cap
 def test_warm_on_load_sends_one_background_request_only_when_enabled(tmp_path, monkeypatch):
     import httpx
 
-    from tokentriage.classifiers import lev_http
+    from levrouter.classifiers import lev_http
 
     calls = []
 
@@ -295,7 +295,7 @@ def test_warm_on_load_sends_one_background_request_only_when_enabled(tmp_path, m
     assert calls == []
     _load(tmp_path, base + "  warm_on_load: true\n", auto_enable=False)
     for t in threading.enumerate():
-        if t.name == "tokentriage-warmup":
+        if t.name == "levrouter-warmup":
             t.join(5)
     assert calls == ["/v1/systemone"]
 
@@ -311,6 +311,6 @@ def test_a_failing_warm_up_never_raises_and_is_reported(tmp_path, monkeypatch, c
     _load(tmp_path, "router:\n  backend: lev-http\n  lev_url: https://lev.example.com\n  allow_remote_lev: true\n  warm_on_load: true\n",
           auto_enable=False)
     for t in threading.enumerate():
-        if t.name == "tokentriage-warmup":
+        if t.name == "levrouter-warmup":
             t.join(5)
     assert "warm-up failed" in capsys.readouterr().err

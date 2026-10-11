@@ -1,4 +1,4 @@
-"""Interactive setup wizard for tokentriage configuration."""
+"""Interactive setup wizard for levrouter configuration."""
 
 from __future__ import annotations
 
@@ -63,14 +63,14 @@ def _prompt_int(prompt: str, default: int) -> int:
 
 def setup_interactive() -> dict | None:
     """
-    Interactive setup wizard for tokentriage configuration.
+    Interactive setup wizard for levrouter configuration.
 
-    Returns a dict that can be saved as tokentriage.yaml, or None if cancelled.
+    Returns a dict that can be saved as levrouter.yaml, or None if cancelled.
     """
     print("\n" + "=" * 80)
-    print("tokentriage Interactive Setup Wizard")
+    print("levrouter Interactive Setup Wizard")
     print("=" * 80)
-    print("\nWelcome! This wizard will help you set up tokentriage.\n")
+    print("\nWelcome! This wizard will help you set up levrouter.\n")
 
     # Step 1: Backend selection
     print("STEP 1: Choose your routing backend")
@@ -93,7 +93,7 @@ def setup_interactive() -> dict | None:
         if not _is_lev_installed():
             print("\n❌ LEV is required for lev-local backend but is not installed.")
             show_lev_installation_guide()
-            print("\nPlease install LEV first, then run 'tokentriage setup' again.")
+            print("\nPlease install LEV first, then run 'levrouter setup' again.")
             return None
         else:
             print("✅ LEV is installed and ready!")
@@ -130,12 +130,12 @@ OpenRouter: Single API key to access multiple providers
         prefix = "openrouter/"
 
         print("""
-Ladder mode lets tokentriage switch vendors: for each request it picks the cheapest
+Ladder mode lets levrouter switch vendors: for each request it picks the cheapest
 capable model among the vendors you allow (e.g. Opus -> an OpenAI model for a simple
 request). Prompts may then go to a different vendor than the one in your code.
 """)
         ladder_vendors = None
-        if _prompt_yes_no("Let tokentriage switch vendors to the cheapest capable model (ladder mode)?"):
+        if _prompt_yes_no("Let levrouter switch vendors to the cheapest capable model (ladder mode)?"):
             known = list(OPENROUTER_FAMILIES)
             raw = _prompt_input("Vendors it may use (comma-separated)", default=", ".join(known))
             chosen = [v.strip() for v in raw.split(",") if v.strip()]
@@ -172,7 +172,7 @@ request). Prompts may then go to a different vendor than the one in your code.
         config_dict["router"]["lev_url"] = url
         if not _is_private(host_of(url) or ""):
             print("   That server is outside your private network, so request text is sent over the internet.")
-            print("   tokentriage requires https for it, and reads the bearer key from TOKENTRIAGE_LEV_API_KEY.")
+            print("   levrouter requires https for it, and reads the bearer key from LEVROUTER_LEV_API_KEY.")
             print("   If it needs other headers (Modal, Cloudflare Access, a gateway), map each header to the NAME of an")
             print("   environment variable under router.lev_headers, for example {Modal-Key: MODAL_KEY}.")
             config_dict["router"]["allow_remote_lev"] = True
@@ -257,13 +257,13 @@ up a tier when the user asks the same question again.
     return config_dict
 
 
-def write_config_file(config_dict: dict, path: Path | str = "tokentriage.yaml") -> bool:
+def write_config_file(config_dict: dict, path: Path | str = "levrouter.yaml") -> bool:
     """
     Write configuration to a YAML file.
 
     Args:
         config_dict: Configuration dictionary
-        path: Path to save the file (default: tokentriage.yaml in current directory)
+        path: Path to save the file (default: levrouter.yaml in current directory)
 
     Returns:
         True if successful, False otherwise
@@ -296,7 +296,7 @@ def setup_cmd() -> int:
     Returns:
         0 if successful, 1 if cancelled/failed
     """
-    print("\ntokentriage setup wizard")
+    print("\nlevrouter setup wizard")
     print("=" * 80)
 
     config_dict = setup_interactive()
@@ -304,18 +304,18 @@ def setup_cmd() -> int:
     if config_dict is None:
         return 1
 
-    # Save to tokentriage.yaml in current directory
-    if write_config_file(config_dict, "tokentriage.yaml"):
+    # Save to levrouter.yaml in current directory
+    if write_config_file(config_dict, "levrouter.yaml"):
         print("\n" + "=" * 80)
         print("Setup complete! 🎉")
         print("=" * 80)
         print("\nNext steps:")
-        print("  1. Review the generated tokentriage.yaml file")
+        print("  1. Review the generated levrouter.yaml file")
         print("  2. Add to your code entry point:")
-        print("     import tokentriage")
-        print("     tokentriage.load_config()")
+        print("     import levrouter")
+        print("     levrouter.load_config()")
         print("  3. Run your application - routing will start automatically!")
-        print("\nFor help: https://github.com/sathyalog/tokentriage")
+        print("\nFor help: https://github.com/sathyalog/levrouter")
         return 0
     else:
         return 1

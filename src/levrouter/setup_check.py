@@ -1,4 +1,4 @@
-"""Setup validation for tokentriage prerequisites."""
+"""Setup validation for levrouter prerequisites."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def show_lev_installation_guide() -> None:
 ║                    ⚠️  LEV PREREQUISITE NOT FOUND                          ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 
-tokentriage requires LEV, a 4B decision model from InterfazeAI that classifies
+levrouter requires LEV, a 4B decision model from InterfazeAI that classifies
 LLM requests by complexity (simple/standard/complex) with 89% accuracy.
 
 LEV is NOT available on PyPI - it must be installed separately.
@@ -135,7 +135,7 @@ Option 2: Use Heuristic Backend (No LEV needed)
 
 If you don't want to install LEV, you can use the heuristic backend:
 
-Update your tokentriage.yaml:
+Update your levrouter.yaml:
   router:
     backend: "heuristic"  # Rule-based, <1ms, 75% accurate
 
@@ -154,7 +154,7 @@ Option 3: Use Remote LEV (Cloud API)
 
 Use InterfazeAI's hosted LEV service (no download needed):
 
-Update your tokentriage.yaml:
+Update your levrouter.yaml:
   router:
     backend: "lev-http"
     lev_url: "https://api.interfaze.ai/lev"
@@ -172,18 +172,18 @@ QUICK START:
 
 Step 1: Run the interactive setup wizard
 
-  tokentriage setup
+  levrouter setup
 
   This will guide you through:
     - Choosing your backend (lev-local, heuristic, or lev-http)
     - Selecting your LLM provider (Anthropic, OpenAI, etc.)
     - Customizing model tiers (optional)
-    - Automatic tokentriage.yaml generation
+    - Automatic levrouter.yaml generation
 
 Step 2: Add to your code
 
-  import tokentriage
-  tokentriage.load_config()
+  import levrouter
+  levrouter.load_config()
 
   # Your LLM calls are now routed automatically!
 
@@ -217,27 +217,27 @@ A: This is normal for 9.2GB. Consider:
    - Using heuristic backend for development
    - Using lev-http for production
 
-Q: "Can I use tokentriage without LEV?"
-A: Yes! Set backend: "heuristic" in tokentriage.yaml
+Q: "Can I use levrouter without LEV?"
+A: Yes! Set backend: "heuristic" in levrouter.yaml
    It gives 75% accuracy with <1ms latency.
 
 ════════════════════════════════════════════════════════════════════════════
 
 NEXT STEPS:
 
-1. Run: tokentriage setup
+1. Run: levrouter setup
 2. Answer the interactive prompts (backend, provider, tiers)
-3. tokentriage.yaml is created automatically
-4. Add import tokentriage; tokentriage.load_config() to your code
+3. levrouter.yaml is created automatically
+4. Add import levrouter; levrouter.load_config() to your code
 5. (Optional) Install LEV if using lev-local backend
 6. Your LLM calls will now be routed automatically!
 
 ════════════════════════════════════════════════════════════════════════════
 
 For more information:
-  📖 tokentriage: https://github.com/sathyalog/tokentriage
+  📖 levrouter: https://github.com/sathyalog/levrouter
   📖 LEV: https://github.com/InterfazeAI/lev
-  💬 Support: Check GitHub issues at https://github.com/sathyalog/tokentriage/issues
+  💬 Support: Check GitHub issues at https://github.com/sathyalog/levrouter/issues
 
 ════════════════════════════════════════════════════════════════════════════
 """

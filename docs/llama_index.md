@@ -1,12 +1,12 @@
-# Llama Index Integration with tokentriage
+# Llama Index Integration with levrouter
 
 **Recommended Approach: Indirect Routing via Underlying SDKs**
 
-tokentriage routes Llama Index calls by routing the underlying Anthropic SDK and OpenAI SDK that Llama Index uses internally. No Llama Index-specific integration needed.
+levrouter routes Llama Index calls by routing the underlying Anthropic SDK and OpenAI SDK that Llama Index uses internally. No Llama Index-specific integration needed.
 
 ## How It Works
 
-Llama Index wraps other LLM SDKs (Anthropic, OpenAI, Gemini, etc.) when you create LlamaIndex LLM instances. tokentriage intercepts at the SDK level, so:
+Llama Index wraps other LLM SDKs (Anthropic, OpenAI, Gemini, etc.) when you create LlamaIndex LLM instances. levrouter intercepts at the SDK level, so:
 
 ```python
 # Your code
@@ -16,7 +16,7 @@ response = llm.complete("What's the capital of France?")
 
 # What happens:
 # 1. LIAnthropic wraps anthropic.Anthropic SDK
-# 2. Your question routes through tokentriage
+# 2. Your question routes through levrouter
 # 3. Cheap model (claude-haiku-4-5) handles simple task
 # 4. Same answer, lower cost
 ```
@@ -26,18 +26,18 @@ response = llm.complete("What's the capital of France?")
 ### Step 1: Install
 
 ```bash
-pip install tokentriage
+pip install levrouter
 # OR for Anthropic+OpenAI
-pip install "tokentriage[anthropic,openai]"
+pip install "levrouter[anthropic,openai]"
 ```
 
 ### Step 2: Enable in Your App
 
 ```python
-import tokentriage
+import levrouter
 
 # Route both LangChain AND Llama Index
-tokentriage.enable(frameworks=["langchain", "anthropic", "openai"])
+levrouter.enable(frameworks=["langchain", "anthropic", "openai"])
 ```
 
 ### Step 3: Use Llama Index Normally
@@ -69,12 +69,12 @@ Works with any Llama Index LLM that uses Anthropic or OpenAI:
 ## Example: Full Llama Index Setup
 
 ```python
-import tokentriage
+import levrouter
 from llama_index.llms.anthropic import Anthropic as LIAnthropic
 from llama_index.core import Document, VectorStoreIndex, Settings
 
 # Enable routing
-tokentriage.enable(frameworks=["anthropic"])
+levrouter.enable(frameworks=["anthropic"])
 
 # Configure LLM (routing applies automatically)
 Settings.llm = LIAnthropic(model="claude-opus-5-5")
@@ -114,8 +114,8 @@ response = index.as_query_engine().query("Compare the geography and culture of F
 **Llama Index calls not being routed?**
 - Verify `enable(frameworks=["anthropic", "openai"])` is called before creating LLM
 - Check that you're using the native SDK-based Llama Index LLMs, not custom wrappers
-- Enable debug logging: `TOKENTRIAGE_LOG_LEVEL=DEBUG`
+- Enable debug logging: `LEVROUTER_LOG_LEVEL=DEBUG`
 
 ---
 
-This approach scales: any SDK that tokentriage supports automatically works with its Llama Index wrapper.
+This approach scales: any SDK that levrouter supports automatically works with its Llama Index wrapper.

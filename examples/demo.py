@@ -10,9 +10,9 @@ from __future__ import annotations
 import argparse
 import logging
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage.features import extract
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter.features import extract
 
 PROMPTS = [
     "What's the capital of Australia?",
@@ -29,14 +29,14 @@ PROMPTS = [
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--backend", default="heuristic", choices=["heuristic", "lev-local", "lev-http"])
-    parser.add_argument("--provider", default="anthropic", choices=sorted(tokentriage.PROVIDERS))
+    parser.add_argument("--provider", default="anthropic", choices=sorted(levrouter.PROVIDERS))
     parser.add_argument("--live", action="store_true", help="make real API calls")
     parser.add_argument("--timeout", type=float, default=30.0, help="seconds per lev decision")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
 
-    config = RouterConfig(backend=args.backend, timeout_s=args.timeout, block_on_load=True, log_path="tokentriage.jsonl")
-    original = tokentriage.PROVIDERS[args.provider].tiers["complex"]
+    config = RouterConfig(backend=args.backend, timeout_s=args.timeout, block_on_load=True, log_path="levrouter.jsonl")
+    original = levrouter.PROVIDERS[args.provider].tiers["complex"]
 
     if args.live and args.provider not in ("anthropic", "openai"):
         parser.error("--live is wired for anthropic and openai; use dry-run for other providers")
@@ -52,7 +52,7 @@ def main() -> None:
                   f"  | {prompt.splitlines()[0][:70]}")
         return
 
-    tokentriage.enable(config)
+    levrouter.enable(config)
     if args.provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -64,10 +64,10 @@ def main() -> None:
 
     for prompt in PROMPTS:
         msg = llm.invoke(prompt)
-        info = msg.response_metadata["tokentriage"]
+        info = msg.response_metadata["levrouter"]
         print(f"\n=== {info['model']} ({info['tier']}) <- {prompt.splitlines()[0][:70]}")
         print(str(msg.content)[:300])
-    print("\n", tokentriage.stats())
+    print("\n", levrouter.stats())
 
 
 if __name__ == "__main__":

@@ -15,9 +15,9 @@ from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from langchain_xai import ChatXAI
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage.features import extract
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter.features import extract
 
 SECRET = "sk-test-SUPERSECRETKEY1234567890"
 
@@ -44,7 +44,7 @@ def fake_network(monkeypatch):
 
 
 def _enable(sig=SIMPLE, **cfg):
-    tokentriage.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, **cfg), FixedClassifier(sig)))
+    levrouter.enable(router=Router(RouterConfig(log_level=None, summary_at_exit=False, **cfg), FixedClassifier(sig)))
 
 
 def _hf(repo="Qwen/Qwen3.8-2.4T-A95B"):
@@ -68,7 +68,7 @@ def _hf(repo="Qwen/Qwen3.8-2.4T-A95B"):
 def test_each_provider_routes_within_itself(fake_network, make, simple_model, complex_model):
     _enable(SIMPLE)
     assert make().invoke("hi").content == f"model={simple_model}"
-    tokentriage.disable()
+    levrouter.disable()
     _enable(COMPLEX)
     assert make().invoke("hi").content == f"model={complex_model}"
 
@@ -88,7 +88,7 @@ def test_chatopenai_on_compatible_endpoints_uses_that_providers_models(fake_netw
     llm = ChatOpenAI(model="whatever-they-configured", api_key=SECRET, base_url=base_url)
     out = llm.invoke("hi")
     assert out.content == f"model={expected}"
-    assert out.response_metadata["tokentriage"]["provider"] != "openai"
+    assert out.response_metadata["levrouter"]["provider"] != "openai"
 
 
 def test_chatanthropic_on_deepseek_anthropic_endpoint(fake_network):
@@ -100,7 +100,7 @@ def test_chatanthropic_on_deepseek_anthropic_endpoint(fake_network):
 def test_unknown_endpoint_is_never_routed(fake_network, caplog):
     _enable(SIMPLE)
     llm = ChatOpenAI(model="my-model", api_key=SECRET, base_url="https://llm-proxy.example.net/v1")
-    with caplog.at_level(logging.INFO, logger="tokentriage"):
+    with caplog.at_level(logging.INFO, logger="levrouter"):
         assert llm.invoke("hi").content == "model=my-model"
         llm.invoke("again")
     skips = [r.getMessage() for r in caplog.records if r.getMessage().startswith("skip")]
@@ -114,7 +114,7 @@ def test_gateway_host_can_be_mapped(fake_network):
 
 
 def test_disabled_provider_is_not_routed(fake_network):
-    tokentriage.enable(
+    levrouter.enable(
         router=Router(RouterConfig(log_level=None, summary_at_exit=False), FixedClassifier(SIMPLE)),
         providers=("anthropic", "openai"),
     )
@@ -140,7 +140,7 @@ def test_dedicated_hf_endpoint_is_not_routed(fake_network):
 
 def test_api_key_stays_on_the_copy_and_out_of_logs(fake_network, tmp_path, capsys):
     path = tmp_path / "calls.jsonl"
-    tokentriage.enable(router=Router(RouterConfig(log_path=str(path), summary_at_exit=False), FixedClassifier(SIMPLE)))
+    levrouter.enable(router=Router(RouterConfig(log_path=str(path), summary_at_exit=False), FixedClassifier(SIMPLE)))
     seen = {}
 
     def spy(self, messages, stop=None, run_manager=None, **kw):
@@ -148,9 +148,9 @@ def test_api_key_stays_on_the_copy_and_out_of_logs(fake_network, tmp_path, capsy
         seen["url"] = self.anthropic_api_url
         return _fake_generate(self, messages, stop, run_manager, **kw)
 
-    tokentriage.disable()
+    levrouter.disable()
     ChatAnthropic._generate = spy
-    tokentriage.enable(router=Router(RouterConfig(log_path=str(path), summary_at_exit=False), FixedClassifier(SIMPLE)))
+    levrouter.enable(router=Router(RouterConfig(log_path=str(path), summary_at_exit=False), FixedClassifier(SIMPLE)))
     ChatAnthropic(model="claude-opus-5-5", api_key=SECRET).invoke(f"my key is {SECRET}, email a@b.com")
     assert seen == {"key": SECRET, "url": "https://api.anthropic.com"}
     written = capsys.readouterr().err + path.read_text()

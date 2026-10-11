@@ -4,7 +4,7 @@
 
 | Data | Where it goes |
 |---|---|
-| Prompts | Only to the LLM provider your code already calls. tokentriage adds no other destination. |
+| Prompts | Only to the LLM provider your code already calls. levrouter adds no other destination. |
 | Classifier input, `lev-local` (default) | Stays in your process. |
 | Classifier input, `lev-http` | Only to a local or private-network server. A remote server needs `allow_remote_lev=True` **and** https. PII is redacted before sending, and redirects are refused. |
 | Logs, JSONL call log, OpenTelemetry spans | A **redacted** prompt preview (logs and JSONL only, `log_prompt_chars=0` removes it), task and user labels, models, tokens, cost, redacted error text. Spans never contain prompt text. |
@@ -13,7 +13,7 @@
 
 ## PII redaction
 
-`tokentriage.pii.redact()` runs on everything tokentriage writes. It masks:
+`levrouter.pii.redact()` runs on everything levrouter writes. It masks:
 
 - **Contact details:** emails, phone numbers
 - **Financial:** payment card numbers (Luhn-checked), IBANs
@@ -31,16 +31,16 @@
 
 **If you have GDPR, DPDP, HIPAA or similar obligations:**
 - set `log_prompt_chars=0`;
-- keep `log_path` and `TOKENTRIAGE_HOME` on access-controlled storage;
+- keep `log_path` and `LEVROUTER_HOME` on access-controlled storage;
 - cover the provider call itself under your existing data agreements with that provider.
 
 ## API keys
 
-- **tokentriage never stores or logs provider API keys.** They stay inside your chat model objects as `SecretStr`. The one place it reads them is `tokentriage models refresh`, which sends each key only to that provider's own model-list endpoint, to list the models the key can use.
+- **levrouter never stores or logs provider API keys.** They stay inside your chat model objects as `SecretStr`. The one place it reads them is `levrouter models refresh`, which sends each key only to that provider's own model-list endpoint, to list the models the key can use.
 - **Same key, same provider.** The per-call copy uses the same key and endpoint. The model is only ever switched to
   another model from the same provider, so a key is never sent to a different provider.
-- **One credential of its own.** The only one tokentriage handles is the optional `lev serve` token (`lev_api_key` /
-  `TOKENTRIAGE_LEV_API_KEY`). It is excluded from `repr` and logs. Keep it in the environment: a `lev_api_key` in a config
+- **One credential of its own.** The only one levrouter handles is the optional `lev serve` token (`lev_api_key` /
+  `LEVROUTER_LEV_API_KEY`). It is excluded from `repr` and logs. Keep it in the environment: a `lev_api_key` in a config
   file is ignored with a warning, because config files get committed.
 - **Tested.** The test suite checks that a key typed into a prompt never appears in stderr, the JSONL file or the usage
   files.
@@ -91,4 +91,4 @@ Please report security issues privately to the maintainer rather than in a publi
 
 ---
 
-*tokentriage is powered by [lev](https://github.com/InterfazeAI/lev) from the InterfazeAI team.*
+*levrouter is powered by [lev](https://github.com/InterfazeAI/lev) from the InterfazeAI team.*

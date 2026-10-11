@@ -1,8 +1,8 @@
 import pytest
 
-import tokentriage
-from tokentriage.classifiers.base import Signals
-from tokentriage.features import RequestFeatures
+import levrouter
+from levrouter.classifiers.base import Signals
+from levrouter.features import RequestFeatures
 
 
 class FixedClassifier:
@@ -33,15 +33,15 @@ COMPLEX = signals(0.05, 0.15, 0.8, 0.9, 0.6)
 
 @pytest.fixture(autouse=True)
 def _clean(tmp_path_factory, monkeypatch):
-    # Keep usage files and live sockets out of the developer's real ~/.tokentriage.
-    monkeypatch.setenv("TOKENTRIAGE_HOME", str(tmp_path_factory.mktemp("tokentriage_home")))
+    # Keep usage files and live sockets out of the developer's real ~/.levrouter.
+    monkeypatch.setenv("LEVROUTER_HOME", str(tmp_path_factory.mktemp("levrouter_home")))
     yield
-    tokentriage.disable()
-    from tokentriage import _usage_warned
-    from tokentriage.config_loader import _warned_env
+    levrouter.disable()
+    from levrouter import _usage_warned
+    from levrouter.config_loader import _warned_env
 
     _warned_env.clear()
     _usage_warned.clear()
-    from tokentriage.integrations._sdk_common import _failed
+    from levrouter.integrations._sdk_common import _failed
 
     _failed.clear()

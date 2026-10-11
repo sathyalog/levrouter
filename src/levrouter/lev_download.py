@@ -116,12 +116,12 @@ def ensure_lev_cached(checkpoint: str = "interfaze-ai/lev") -> bool:
 
     Returns False (after printing why) if either cannot be obtained, e.g. no network on first run.
     """
-    print(f"🔎 tokentriage: checking the local Hugging Face cache for {checkpoint} and its base model...")
+    print(f"🔎 levrouter: checking the local Hugging Face cache for {checkpoint} and its base model...")
     try:
         adapter_dir = _fetch("lev adapter", checkpoint, None)
         manifest = json.loads((Path(adapter_dir) / "lev_release.json").read_text())
         _fetch("base model", manifest["base_model"], BASE_PATTERNS)
     except Exception as exc:  # noqa: BLE001 - reported to the user, who falls back to the heuristic
-        print(f"⚠️  tokentriage: could not get the lev model files: {exc}")
+        print(f"⚠️  levrouter: could not get the lev model files: {exc}")
         return False
     return True

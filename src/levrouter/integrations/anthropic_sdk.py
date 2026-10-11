@@ -7,7 +7,7 @@ import logging
 from ..converters.anthropic import extract
 from ._sdk_common import SdkPatches
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 _patches = SdkPatches(allowed=frozenset({"anthropic"}))
 
@@ -19,7 +19,7 @@ def install(providers: tuple[str, ...]) -> list[str]:
     try:
         from anthropic.resources.messages import AsyncMessages, Messages
     except ImportError:
-        log.debug("tokentriage: anthropic SDK not installed; skipping")
+        log.debug("levrouter: anthropic SDK not installed; skipping")
         return []
     _patches.enabled.add("anthropic")
     _patches.patch((Messages, AsyncMessages), ("create", "stream", "parse"), extract)

@@ -13,11 +13,11 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_openrouter import ChatOpenRouter
 from pydantic import BaseModel
 
-import tokentriage
-from tokentriage import Router, RouterConfig
-from tokentriage import usage_store as u
-from tokentriage.__main__ import main
-from tokentriage.evaluate import (
+import levrouter
+from levrouter import Router, RouterConfig
+from levrouter import usage_store as u
+from levrouter.__main__ import main
+from levrouter.evaluate import (
     Evaluator, combine_judgements, compare_tool_calls, load_prompts, run_batch, sampled,
 )
 
@@ -68,12 +68,12 @@ def fake(monkeypatch):
 def _enable(**cfg):
     base = dict(mode="eval", eval_sample_rate=1.0, log_level=None, summary_at_exit=False)
     base.update(cfg)
-    tokentriage.enable(router=Router(RouterConfig(**base), FixedClassifier(SIMPLE)))
-    return tokentriage.integrations.langchain._State.evaluator
+    levrouter.enable(router=Router(RouterConfig(**base), FixedClassifier(SIMPLE)))
+    return levrouter.integrations.langchain._State.evaluator
 
 
 def _eval_rows():
-    return [r for r in tokentriage._UsageState.memory.query() if r.kind == "eval"]
+    return [r for r in levrouter._UsageState.memory.query() if r.kind == "eval"]
 
 
 # -- pure functions ----------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_serves_baseline_and_records_judged_eval(fake):
     out = ChatOpenRouter(model=BASE, api_key=KEY).invoke("What is the capital of France?")
     evaluator.flush()
     assert out.content == f"answer from {BASE}"                       # the app got the configured model
-    assert "routing would use anthropic/claude-haiku-4.5" in out.response_metadata["tokentriage"]["reason"]
+    assert "routing would use anthropic/claude-haiku-4.5" in out.response_metadata["levrouter"]["reason"]
     kinds = [k for _, k in fake.calls]
     assert kinds == ["text", "text", "judge", "judge"]                 # served, other model, judge x2
     assert fake.calls[1][0] == ROUTED and fake.calls[2][0] == JUDGE
@@ -178,13 +178,13 @@ def test_eval_rows_in_files_reports_and_redacted_log(fake, tmp_path, capsys):
     log_path = tmp_path / "eval.jsonl"
     evaluator = _enable(eval_log_path=str(log_path))
     ChatOpenRouter(model=BASE, api_key=KEY).invoke("Email jane@acme.com about the refund",
-                                                   config={"metadata": {"tokentriage_task": "email"}})
+                                                   config={"metadata": {"levrouter_task": "email"}})
     evaluator.flush()
     rows = json.loads(log_path.read_text().splitlines()[0])
     assert "jane@acme.com" not in json.dumps(rows) and "[EMAIL]" in rows["prompt"]
     assert oct(log_path.stat().st_mode & 0o777) == "0o600"
 
-    assert tokentriage.eval_report(by="task")["rows"][0]["task"] == "email"
+    assert levrouter.eval_report(by="task")["rows"][0]["task"] == "email"
     capsys.readouterr()
     assert main(["usage", "--by", "task"]) == 0
     out = capsys.readouterr().out
@@ -225,14 +225,14 @@ def test_load_prompts_txt(tmp_path):
 
 def test_run_launcher_enables_routing_without_code_changes(tmp_path):
     probe = tmp_path / "probe.py"
-    probe.write_text("import tokentriage.integrations.langchain as lc\nprint('enabled', lc._State.route_all)\n")
+    probe.write_text("import levrouter.integrations.langchain as lc\nprint('enabled', lc._State.route_all)\n")
     other = tmp_path / "site"
     other.mkdir()
     (other / "sitecustomize.py").write_text("import os\nos.environ['CHAINED'] = '1'\n")
     probe_chain = tmp_path / "probe2.py"
     probe_chain.write_text("import os\nprint('chained', os.environ.get('CHAINED'))\n")
-    env = {**os.environ, "TOKENTRIAGE_LOG_LEVEL": "WARNING", "PYTHONPATH": str(other)}
-    exe = str(Path(sys.executable).with_name("tokentriage"))
+    env = {**os.environ, "LEVROUTER_LOG_LEVEL": "WARNING", "PYTHONPATH": str(other)}
+    exe = str(Path(sys.executable).with_name("levrouter"))
     out = subprocess.run([exe, "run", "--", sys.executable, str(probe)], env=env, capture_output=True, text=True)
     assert "enabled True" in out.stdout
     out = subprocess.run([exe, "run", "--", sys.executable, str(probe_chain)], env=env, capture_output=True, text=True)
@@ -244,7 +244,7 @@ def test_run_launcher_enables_routing_without_code_changes(tmp_path):
 def test_eval_route_log_names_the_compared_model(fake, caplog):
     import logging
     evaluator = _enable()
-    with caplog.at_level(logging.INFO, logger="tokentriage"):
+    with caplog.at_level(logging.INFO, logger="levrouter"):
         ChatOpenRouter(model=BASE, api_key=KEY).invoke("What is 2+2?")
         evaluator.flush()
     route = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("route"))

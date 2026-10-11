@@ -7,8 +7,8 @@ import pytest
 from conftest import SIMPLE, FixedClassifier
 
 import anthropic
-import tokentriage
-from tokentriage import Router, RouterConfig
+import levrouter
+from levrouter import Router, RouterConfig
 
 SSE = (
     'event: message_start\ndata: {"type":"message_start","message":{"id":"m1","type":"message","role":"assistant",'
@@ -41,7 +41,7 @@ def sent(monkeypatch):
 
 
 def _enable(**cfg):
-    tokentriage.enable(router=Router(RouterConfig(**cfg), FixedClassifier(SIMPLE)), frameworks=("anthropic",))
+    levrouter.enable(router=Router(RouterConfig(**cfg), FixedClassifier(SIMPLE)), frameworks=("anthropic",))
 
 
 def _ask(client, **kw):
@@ -53,7 +53,7 @@ def test_sync_create_is_routed_and_counted(sent):
     _enable()
     reply = _ask(anthropic.Anthropic(api_key="sk-ant-test"))
     assert sent == ["claude-haiku-4-5"] and reply.model == "claude-haiku-4-5"
-    stats = tokentriage.stats()
+    stats = levrouter.stats()
     assert stats["calls"] == 1 and stats["by_model"] == {"claude-haiku-4-5": 1}
 
 
@@ -90,7 +90,7 @@ def test_tool_calls_stay_routable(sent):
 
 def test_system_prompt_reaches_the_classifier(sent):
     clf = FixedClassifier(SIMPLE)
-    tokentriage.enable(router=Router(RouterConfig(), clf), frameworks=("anthropic",))
+    levrouter.enable(router=Router(RouterConfig(), clf), frameworks=("anthropic",))
     _ask(anthropic.Anthropic(api_key="sk-ant-test"), system="You are a tax adviser.")
     assert sent == ["claude-haiku-4-5"] and clf.calls == 1
 
@@ -98,7 +98,7 @@ def test_system_prompt_reaches_the_classifier(sent):
 def test_never_route_and_unknown_hosts_are_left_alone(sent):
     _enable(never_route=("claude-opus-*",))
     _ask(anthropic.Anthropic(api_key="sk-ant-test"))
-    tokentriage.disable()
+    levrouter.disable()
     _enable()
     _ask(anthropic.Anthropic(api_key="sk-ant-test", base_url="https://llm-proxy.example.com"))
     assert sent == ["claude-opus-5-5", "claude-opus-5-5"]
@@ -106,8 +106,8 @@ def test_never_route_and_unknown_hosts_are_left_alone(sent):
 
 def test_disable_restores_the_sdk(sent):
     _enable()
-    tokentriage.disable()
-    assert not getattr(anthropic.resources.messages.Messages.create, "__tokentriage__", False)
+    levrouter.disable()
+    assert not getattr(anthropic.resources.messages.Messages.create, "__levrouter__", False)
     _ask(anthropic.Anthropic(api_key="sk-ant-test"))
     assert sent == ["claude-opus-5-5"]
 
@@ -115,9 +115,9 @@ def test_disable_restores_the_sdk(sent):
 def test_langchain_call_is_not_routed_twice(sent):
     from langchain_anthropic import ChatAnthropic
 
-    tokentriage.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=("langchain", "anthropic"))
+    levrouter.enable(router=Router(RouterConfig(), FixedClassifier(SIMPLE)), frameworks=("langchain", "anthropic"))
     ChatAnthropic(model="claude-opus-5-5", api_key="sk-ant-test", max_tokens=50).invoke("What is 2+2?")
-    assert sent == ["claude-haiku-4-5"] and tokentriage.stats()["calls"] == 1
+    assert sent == ["claude-haiku-4-5"] and levrouter.stats()["calls"] == 1
 
 
 def test_router_bug_falls_back_to_the_configured_model(sent, monkeypatch):
@@ -127,6 +127,6 @@ def test_router_bug_falls_back_to_the_configured_model(sent, monkeypatch):
         raise RuntimeError("bug inside the router")
 
     monkeypatch.setattr(router, "decide", boom)
-    tokentriage.enable(router=router, frameworks=("anthropic",))
+    levrouter.enable(router=router, frameworks=("anthropic",))
     _ask(anthropic.Anthropic(api_key="sk-ant-test"))
     assert sent == ["claude-opus-5-5"]

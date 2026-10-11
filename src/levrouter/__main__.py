@@ -1,12 +1,12 @@
-"""tokentriage command line.
+"""levrouter command line.
 
-    tokentriage check                 is the environment ready? (lev, device, provider packages, usage store)
-    tokentriage usage [--live] ...    token usage and estimated cost for the last 24h
-    tokentriage run -- <command>      run a program with routing enabled, without editing it
-    tokentriage models refresh        update prices/capabilities and the model ids your API keys can use
-    tokentriage openrouter refresh    update the OpenRouter model catalog only (prices, input types)
-    tokentriage eval run FILE ...     measure quality: routed vs configured model on your prompts (paid calls)
-    tokentriage eval report ...       quality of routing from evaluated calls (last 24h)
+    levrouter check                 is the environment ready? (lev, device, provider packages, usage store)
+    levrouter usage [--live] ...    token usage and estimated cost for the last 24h
+    levrouter run -- <command>      run a program with routing enabled, without editing it
+    levrouter models refresh        update prices/capabilities and the model ids your API keys can use
+    levrouter openrouter refresh    update the OpenRouter model catalog only (prices, input types)
+    levrouter eval run FILE ...     measure quality: routed vs configured model on your prompts (paid calls)
+    levrouter eval report ...       quality of routing from evaluated calls (last 24h)
 
 Only `run` (through the program it starts) calls LLM provider APIs.
 """
@@ -39,7 +39,7 @@ def _version(dist: str) -> str | None:
 def check() -> int:
     ok = "✓"
     no = "✗"
-    print(f"tokentriage {__version__}  (Python {sys.version.split()[0]})")
+    print(f"levrouter {__version__}  (Python {sys.version.split()[0]})")
     if sys.version_info < (3, 12):
         print(f"  {no} Python 3.12+ is required (lev's minimum)")
 
@@ -62,7 +62,7 @@ def check() -> int:
 
     resolved = resolve_config()
     cfg = resolved.cfg
-    where = str(resolved.source) if resolved.source else "no tokentriage.yaml found, using defaults"
+    where = str(resolved.source) if resolved.source else "no levrouter.yaml found, using defaults"
     print(f"\nConfig ({where}):")
     print(f"  enabled={resolved.enabled} backend={cfg.backend} timeout_s={cfg.timeout_s} block_on_load={cfg.block_on_load} "
           f"log_level={cfg.log_level}")
@@ -73,7 +73,7 @@ def check() -> int:
     for provider, classes in PROVIDER_CLASSES.items():
         own = TARGETS[classes[0]]
         installed = importlib.util.find_spec(own.module) is not None
-        extra = f"pip install 'tokentriage[{provider}]'"
+        extra = f"pip install 'levrouter[{provider}]'"
         print(f"  {ok if installed else '-'} {provider:<12} {own.class_name:<24} {'' if installed else extra}")
 
     home = u.home_dir(cfg.usage_home)
@@ -98,10 +98,10 @@ def usage_cmd(args: argparse.Namespace) -> int:
         answers = live.query_all(live.run_dir(home), request)
         good = [a for a in answers if "report" in a]
         if not good:
-            msg = {"error": "no running tokentriage process found", "run_dir": str(live.run_dir(home))}
+            msg = {"error": "no running levrouter process found", "run_dir": str(live.run_dir(home))}
             print(json.dumps(msg) if args.json else
-                  f"No running app with tokentriage found (looked in {live.run_dir(home)}).\n"
-                  "Live numbers exist only while the app runs; use `tokentriage usage` (no --live) to read the "
+                  f"No running app with levrouter found (looked in {live.run_dir(home)}).\n"
+                  "Live numbers exist only while the app runs; use `levrouter usage` (no --live) to read the "
                   "rolling files.")
             return 1
         report = u.merge([a["report"] for a in good])
@@ -118,8 +118,8 @@ def usage_cmd(args: argparse.Namespace) -> int:
             msg = {"error": "no usage files", "dir": str(store.dir)}
             print(json.dumps(msg) if args.json else
                   f"No usage files in {store.dir}.\n"
-                  "They are written by apps that call tokentriage.enable() with usage_file=True (the default). "
-                  "Point to another location with --dir or TOKENTRIAGE_HOME, or run `tokentriage check`.")
+                  "They are written by apps that call levrouter.enable() with usage_file=True (the default). "
+                  "Point to another location with --dir or LEVROUTER_HOME, or run `levrouter check`.")
             return 1
         since, note = u.parse_since(args.since, retention)
         records, bad = store.read(since)
@@ -134,7 +134,7 @@ def usage_cmd(args: argparse.Namespace) -> int:
         print(json.dumps(out, indent=2, default=str))
         return 0
 
-    print(u.format_table(report, title=f"tokentriage usage, last {args.since} - {source}"))
+    print(u.format_table(report, title=f"levrouter usage, last {args.since} - {source}"))
     if not args.live:
         quality = u.aggregate_eval(records, by=args.by, user=args.user, task=args.task)
         if quality["total"]["evaluated"] or quality["total"]["errors"]:
@@ -156,20 +156,20 @@ def run_cmd(args: argparse.Namespace) -> int:
     if command and command[0] == "--":
         command = command[1:]
     if not command:
-        print("usage: tokentriage run [--mode eval] [--backend heuristic] -- <command> [args...]", file=sys.stderr)
+        print("usage: levrouter run [--mode eval] [--backend heuristic] -- <command> [args...]", file=sys.stderr)
         return 2
     autoload = Path(__file__).resolve().parent / "_autoload"
     env = dict(os.environ)
-    env["TOKENTRIAGE_AUTOENABLE"] = "1"
+    env["LEVROUTER_AUTOENABLE"] = "1"
     env["PYTHONPATH"] = os.pathsep.join(p for p in (str(autoload), env.get("PYTHONPATH", "")) if p)
     if args.mode:
-        env["TOKENTRIAGE_MODE"] = args.mode
+        env["LEVROUTER_MODE"] = args.mode
     if args.backend:
-        env["TOKENTRIAGE_BACKEND"] = args.backend
+        env["LEVROUTER_BACKEND"] = args.backend
     try:
         return subprocess.call(command, env=env)
     except FileNotFoundError:
-        print(f"tokentriage run: command not found: {command[0]}", file=sys.stderr)
+        print(f"levrouter run: command not found: {command[0]}", file=sys.stderr)
         return 127
 
 
@@ -178,7 +178,7 @@ def openrouter_cmd(args: argparse.Namespace) -> int:
 
     from .providers import build_openrouter_catalog, openrouter_catalog, openrouter_catalog_path
 
-    req = urllib.request.Request("https://openrouter.ai/api/v1/models", headers={"User-Agent": "tokentriage"})
+    req = urllib.request.Request("https://openrouter.ai/api/v1/models", headers={"User-Agent": "levrouter"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         catalog = build_openrouter_catalog(json.load(resp)["data"])
     path = openrouter_catalog_path()
@@ -204,7 +204,7 @@ MODEL_LISTS = {
 def _list_models(url: str, header: str, key: str) -> list[str]:
     import urllib.request
 
-    headers = {"User-Agent": "tokentriage", header: f"Bearer {key}" if header == "Authorization" else key}
+    headers = {"User-Agent": "levrouter", header: f"Bearer {key}" if header == "Authorization" else key}
     if header == "x-api-key":
         headers["anthropic-version"] = "2023-06-01"
     ids: list[str] = []
@@ -256,7 +256,7 @@ def models_cmd(args: argparse.Namespace) -> int:
 def eval_cmd(args: argparse.Namespace) -> int:
     import time as _time
 
-    import tokentriage
+    import levrouter
 
     from .evaluate import load_prompts, make_chat_model, run_batch
 
@@ -294,7 +294,7 @@ def eval_cmd(args: argparse.Namespace) -> int:
         cfg.eval_judge = args.judge
     if args.backend:
         cfg.backend = args.backend
-    tokentriage.enable(cfg)
+    levrouter.enable(cfg)
     from .integrations import langchain as lc
 
     llm = make_chat_model(args.provider, args.model)
@@ -305,7 +305,7 @@ def eval_cmd(args: argparse.Namespace) -> int:
         print(f"  [{i}/{n}] {meta.get('tier', '?'):<8} {meta.get('model', '?'):<34} spent ${spent:.4f}", file=sys.stderr)
 
     result = run_batch(llm, prompts, lc._State.evaluator, args.budget, progress)
-    records = [r for r in tokentriage._UsageState.memory.query() if r.kind == "eval"]
+    records = [r for r in levrouter._UsageState.memory.query() if r.kind == "eval"]
     report = u.aggregate_eval(records, by=args.by)
     if args.json:
         print(json.dumps({"run": result, "quality": report, "log": log_path}, indent=2))
@@ -335,23 +335,23 @@ def _print_regressions(path: str, n: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="tokentriage")
+    parser = argparse.ArgumentParser(prog="levrouter")
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("setup", help="interactive setup wizard for tokentriage configuration")
+    sub.add_parser("setup", help="interactive setup wizard for levrouter configuration")
     sub.add_parser("check", help="check the lev prerequisite, device, provider packages and usage store")
     p = sub.add_parser("usage", help="token usage and estimated cost (default: last 24h from the rolling files)")
     p.add_argument("--since", default="24h", help="window: 30m, 6h, 24h, or an ISO time (max: retention, 24h)")
     p.add_argument("--by", default="model", choices=u.GROUP_KEYS, help="group rows by this field")
-    p.add_argument("--user", help="only calls tagged metadata={'tokentriage_user': ...} with this value")
+    p.add_argument("--user", help="only calls tagged metadata={'levrouter_user': ...} with this value")
     p.add_argument("--task", help="only calls with this task label")
     p.add_argument("--live", action="store_true", help="ask running app processes (in-memory, until restart)")
-    p.add_argument("--dir", help="tokentriage home to read (default: $TOKENTRIAGE_HOME or ~/.tokentriage)")
+    p.add_argument("--dir", help="levrouter home to read (default: $LEVROUTER_HOME or ~/.levrouter)")
     p.add_argument("--recent", type=int, default=0, metavar="N", help="also list the last N calls")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("-v", "--verbose", action="store_true", help="with --live: one line per process")
-    r = sub.add_parser("run", help="run a program with tokentriage enabled (no code changes)")
-    r.add_argument("--mode", choices=["route", "eval"], help="sets TOKENTRIAGE_MODE for the program")
-    r.add_argument("--backend", choices=["lev-local", "lev-http", "heuristic"], help="sets TOKENTRIAGE_BACKEND")
+    r = sub.add_parser("run", help="run a program with levrouter enabled (no code changes)")
+    r.add_argument("--mode", choices=["route", "eval"], help="sets LEVROUTER_MODE for the program")
+    r.add_argument("--backend", choices=["lev-local", "lev-http", "heuristic"], help="sets LEVROUTER_BACKEND")
     r.add_argument("command_args", nargs=argparse.REMAINDER, help="-- the command to run")
     m = sub.add_parser("models", help="keep model data current: prices, capabilities and the models your keys can use")
     m.add_argument("action", choices=["refresh"], help="refresh: OpenRouter catalogue + each provider's model list")
@@ -370,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     er.add_argument("--backend", choices=["lev-local", "lev-http", "heuristic"])
     er.add_argument("--by", default="tier", choices=u.GROUP_KEYS)
     er.add_argument("--regressions", type=int, default=5, help="show up to N regressions")
-    er.add_argument("--log", help="where to write the redacted details (default ~/.tokentriage/eval-<time>.jsonl)")
+    er.add_argument("--log", help="where to write the redacted details (default ~/.levrouter/eval-<time>.jsonl)")
     er.add_argument("--json", action="store_true")
     ep = evs.add_parser("report", help="quality from evaluated calls in the usage files")
     ep.add_argument("--since", default="24h")

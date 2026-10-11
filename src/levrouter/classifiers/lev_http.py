@@ -22,7 +22,7 @@ class UnsafeLevEndpoint(ValueError):
     """The lev-http URL would send prompts somewhere this config does not allow."""
 
 
-log = logging.getLogger("tokentriage")
+log = logging.getLogger("levrouter")
 
 # A name with no dot, such as a Docker Compose service ("lev") or a Kubernetes one ("lev-service").
 _SERVICE_NAME = re.compile(r"[a-z][a-z0-9_-]*")
@@ -65,7 +65,7 @@ def _request_headers(token: str, header_env: dict[str, str] | None) -> dict[str,
     for header, var in (header_env or {}).items():
         value = os.environ.get(var)
         if not value:
-            log.warning("tokentriage: lev_headers: environment variable %s is not set, so header %s is not sent", var, header)
+            log.warning("levrouter: lev_headers: environment variable %s is not set, so header %s is not sent", var, header)
             continue
         for existing in [h for h in headers if h.lower() == header.lower()]:
             del headers[existing]
@@ -89,7 +89,7 @@ class LevHttpClassifier:
 
         check_endpoint(base_url, allow_remote)
         self.redact_input = redact_input
-        token = api_key or os.environ.get("TOKENTRIAGE_LEV_API_KEY") or "local"
+        token = api_key or os.environ.get("LEVROUTER_LEV_API_KEY") or "local"
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_s,

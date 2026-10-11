@@ -4,11 +4,11 @@ import httpx
 import pytest
 from langchain_core.messages import HumanMessage
 
-from tokentriage import RouterConfig
-from tokentriage.classifiers.lev_http import LevHttpClassifier, UnsafeLevEndpoint
-from tokentriage.features import extract
-from tokentriage.pii import find, redact
-from tokentriage.router import build_classifier
+from levrouter import RouterConfig
+from levrouter.classifiers.lev_http import LevHttpClassifier, UnsafeLevEndpoint
+from levrouter.features import extract
+from levrouter.pii import find, redact
+from levrouter.router import build_classifier
 
 
 @pytest.mark.parametrize(
@@ -103,7 +103,7 @@ def test_state_sent_to_lev_http_is_redacted(monkeypatch):
             "needs_code": {"type": "noul", "noul": 0.0},
         }})
 
-    monkeypatch.setenv("TOKENTRIAGE_LEV_API_KEY", "lev-token-123")
+    monkeypatch.setenv("LEVROUTER_LEV_API_KEY", "lev-token-123")
     clf = LevHttpClassifier("http://localhost:8000")
     clf._client = httpx.Client(base_url="http://localhost:8000", transport=httpx.MockTransport(handler),
                                headers=clf._client.headers)
