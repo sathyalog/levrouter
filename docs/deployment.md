@@ -259,7 +259,7 @@ Only the LangChain classes listed in the README, plus the Anthropic and OpenAI S
 
 ## Production checklist
 
-- Pin both packages: `levrouter @ git+https://github.com/sathyalog/levrouter.git@<tag-or-commit>`, and lev to a commit.
+- Pin both packages: `levrouter==<version>` from PyPI (for example `levrouter==0.1.0`), and lev to a commit, since lev is installed from GitHub.
 - Provider keys and `LEVROUTER_LEV_API_KEY` come from your secret store; none of them is in `levrouter.yaml`.
 - `timeout_s` is set to what your latency allows.
 - The data folder is writable, or `usage_file` and `usage_live` are `false`.

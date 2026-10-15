@@ -97,7 +97,7 @@ Other tools in this space fall into three groups:
 
 ## Installation
 
-Requirements: Python 3.12+, git, and a LangChain provider package (for example `langchain-anthropic`). levrouter and lev are installed from GitHub; neither is on PyPI.
+Requirements: Python 3.12+ and a LangChain provider package (for example `langchain-anthropic`). levrouter is installed from [PyPI](https://pypi.org/project/levrouter/). lev is not on PyPI, so it is installed from GitHub (and needs git).
 
 ### With uv (recommended)
 
@@ -108,14 +108,14 @@ Run these inside your project:
 uv add "lev[serve] @ git+https://github.com/InterfazeAI/lev.git#subdirectory=packages/lev"
 
 # 2. levrouter
-uv add "git+https://github.com/sathyalog/levrouter.git"
+uv add levrouter
 
 # 3. install everything and check that lev and torch import
 uv sync
 uv run python -c 'import lev, torch, transformers; print(torch.__version__)'
 ```
 
-To pick up a newer levrouter from GitHub later:
+To pick up a newer levrouter from PyPI later:
 
 ```bash
 uv sync --upgrade-package levrouter
@@ -125,10 +125,10 @@ uv sync --upgrade-package levrouter
 
 ```bash
 pip install "lev[serve] @ git+https://github.com/InterfazeAI/lev#subdirectory=packages/lev"   # lev-local only
-pip install "git+https://github.com/sathyalog/levrouter.git"
+pip install levrouter
 ```
 
-Provider packages can come with levrouter as extras, e.g. `pip install "levrouter[anthropic] @ git+https://github.com/sathyalog/levrouter.git"`. The available extras are `anthropic`, `openai`, `gemini`, `groq`, `deepseek`, `mistral`, `xai`, `huggingface`, `openrouter`, `providers` (all of them), `http` (for lev-http), `otel` and `all`.
+Provider packages can come with levrouter as extras, e.g. `pip install "levrouter[anthropic]"`. The available extras are `anthropic`, `openai`, `gemini`, `groq`, `deepseek`, `mistral`, `xai`, `huggingface`, `openrouter`, `providers` (all of them), `http` (for lev-http), `otel` and `all`.
 
 ### Working on levrouter itself
 
@@ -138,7 +138,7 @@ To make your app use a local checkout (so edits apply immediately), install it i
 uv pip install -e /path/to/levrouter
 ```
 
-A plain `uv add git+...` installs a copy of the version on GitHub, so local edits to levrouter are not seen until they are pushed and upgraded.
+A plain `uv add levrouter` installs the released version from PyPI, so local edits to levrouter are not seen until they are released and upgraded. To test an unreleased commit from GitHub, use `uv add "git+https://github.com/sathyalog/levrouter.git"`.
 
 ### Check the setup
 
@@ -387,7 +387,7 @@ router:
 With that config, a simple request sent to `anthropic/claude-opus-5.5` can be answered by `openai/gpt-6-luna`; the log shows the reason, e.g. `ladder: anthropic -> openai`.
 
 - **When it applies:** only when your chat model calls OpenRouter: `ChatOpenRouter`, or `ChatOpenAI` / `ChatAnthropic` with OpenRouter's base URL (`https://openrouter.ai/api/v1`). Calls made with a provider's own key and endpoint never switch vendor.
-- **What you need:** one `OPENROUTER_API_KEY`, and the OpenRouter package: `pip install "levrouter[openrouter] @ git+https://github.com/sathyalog/levrouter.git"` (or `langchain-openrouter`).
+- **What you need:** one `OPENROUTER_API_KEY`, and the OpenRouter package: `pip install "levrouter[openrouter]"` (or `langchain-openrouter`).
 - **Keep in mind:**
   - Your prompt may go to a different company than the one in your code, so list only vendors you're allowed to use.
   - Answers can differ in style between vendors. Try it with [evaluation mode](docs/evaluation.md) first.
